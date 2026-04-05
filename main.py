@@ -71,7 +71,7 @@ OPEN_ACCESS_LOCKOUT_MINUTES = max(1, int(os.getenv("OPEN_ACCESS_LOCKOUT_MINUTES"
 TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 DEFAULT_ADMIN_LOGIN_PATH = "/admin"
 DEFAULT_HOME_TITLE = "Microsoft-Email-Manager"
-DEFAULT_HOME_INTRO = "用于集中管理 Microsoft 邮箱账户、邮件公开分享、API 接入与日常运营排查。"
+DEFAULT_HOME_INTRO = "批量管理 微软邮箱账户\n邮件与 API 自动化中枢"
 
 # OAuth2配置
 TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"

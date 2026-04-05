@@ -1665,11 +1665,12 @@
             align-items: center;
             gap: 16px;
             flex: 1;
+            min-height: 62px;
         }
 
         .sidebar-logo {
-            width: 42px;
-            height: 42px;
+            width: 58px;
+            height: 58px;
             border-radius: 0;
             position: relative;
             display: inline-flex;
@@ -1933,11 +1934,11 @@
         }
 
         .sidebar.is-collapsed {
-            width: 86px;
+            width: 104px;
         }
 
         .sidebar.is-collapsed .sidebar-header {
-            padding: 16px 12px 14px;
+            padding: 24px 20px 18px;
         }
 
         .sidebar.is-collapsed .sidebar-brand {
@@ -1950,14 +1951,14 @@
         .sidebar.is-collapsed .sidebar-brand-main {
             width: 100%;
             flex-direction: row;
-            justify-content: center;
-            gap: 0;
+            justify-content: flex-start;
+            gap: 16px;
             align-items: center;
         }
 
         .sidebar.is-collapsed .sidebar-logo {
-            width: 42px;
-            height: 42px;
+            width: 58px;
+            height: 58px;
             border-radius: 0;
         }
 
@@ -1972,29 +1973,29 @@
         }
 
         .sidebar.is-collapsed .sidebar-nav {
-            padding-inline: 12px;
+            padding-inline: 14px;
         }
 
         .sidebar.is-collapsed .nav-item,
         .sidebar.is-collapsed .sidebar-utility,
         .sidebar.is-collapsed .sidebar-toggle {
-            justify-content: center;
+            justify-content: flex-start;
         }
 
         .sidebar.is-collapsed .nav-item {
-            width: 62px;
+            width: 100%;
             min-width: 0;
             min-height: 62px;
             height: 62px;
             margin: 0;
-            padding: 0;
-            gap: 0;
+            padding: 0 16px;
+            gap: 16px;
         }
 
         .sidebar.is-collapsed .nav-item .icon {
-            width: 40px;
-            height: 40px;
-            flex: 0 0 40px;
+            width: 38px;
+            height: 38px;
+            flex: 0 0 38px;
         }
 
         .sidebar.is-collapsed .nav-item .icon svg {
@@ -2005,32 +2006,32 @@
 
         .sidebar.is-collapsed .sidebar-utility,
         .sidebar.is-collapsed .sidebar-toggle {
-            width: 62px;
+            width: 100%;
             min-width: 0;
-            height: 62px;
-            min-height: 62px;
+            height: 46px;
+            min-height: 46px;
             margin: 0;
-            padding: 0;
-            gap: 0;
+            padding: 0 10px;
+            gap: 10px;
         }
 
         .sidebar.is-collapsed .sidebar-utility .ui-icon,
         .sidebar.is-collapsed .sidebar-toggle .ui-icon {
-            width: 28px;
-            height: 28px;
-            flex: 0 0 28px;
+            width: 34px;
+            height: 34px;
+            flex: 0 0 34px;
         }
 
         .sidebar.is-collapsed .sidebar-utility .ui-icon svg,
         .sidebar.is-collapsed .sidebar-toggle .ui-icon svg {
-            width: 17px;
-            height: 17px;
-            flex: 0 0 17px;
+            width: 20px;
+            height: 20px;
+            flex: 0 0 20px;
         }
 
         .sidebar.is-collapsed .sidebar-footer {
-            align-items: center;
-            padding: 16px 12px 18px;
+            align-items: stretch;
+            padding: 16px 14px 18px;
         }
 
         .sidebar.is-collapsed #sidebarToggle .ui-icon svg {

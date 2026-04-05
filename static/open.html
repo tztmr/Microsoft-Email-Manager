@@ -662,31 +662,59 @@
         .turnstile-slot {
             display: grid;
             gap: 8px;
-            min-height: 110px;
+            min-height: 132px;
             justify-items: center;
+            align-content: start;
+            width: 100%;
+            transition: opacity 0.2s ease, max-height 0.24s ease, min-height 0.24s ease;
+        }
+
+        .turnstile-slot.is-inactive {
+            min-height: 0;
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            pointer-events: none;
         }
 
         .turnstile-slot-shell {
-            min-height: 72px;
-            width: fit-content;
-            max-width: 100%;
+            width: min(100%, 332px);
+            min-height: 92px;
             border-radius: 16px;
             border: 1px dashed rgba(15, 118, 110, 0.28);
             background: rgba(248, 250, 252, 0.92);
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 6px;
+            padding: 10px;
             overflow: hidden;
+            box-sizing: border-box;
         }
 
         .turnstile-widget {
-            width: auto;
+            width: 300px;
             max-width: 100%;
-            min-height: 65px;
+            min-height: 72px;
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+
+        .turnstile-widget:empty::before {
+            content: "安全验证加载中";
+            display: inline-flex;
+            width: 100%;
+            min-height: 72px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background:
+                linear-gradient(90deg, rgba(226, 232, 240, 0.6) 0%, rgba(241, 245, 249, 0.96) 50%, rgba(226, 232, 240, 0.6) 100%);
+            background-size: 220% 100%;
+            color: rgba(100, 116, 139, 0.92);
+            font-size: 13px;
+            letter-spacing: 0.02em;
+            animation: turnstileSkeleton 1.8s linear infinite;
         }
 
         .turnstile-hint {
@@ -694,6 +722,7 @@
             color: var(--muted);
             font-size: 13px;
             line-height: 1.5;
+            text-align: center;
         }
 
         .turnstile-hint.is-error {
@@ -714,6 +743,15 @@
 
         .hidden {
             display: none !important;
+        }
+
+        @keyframes turnstileSkeleton {
+            0% {
+                background-position: 0% 50%;
+            }
+            100% {
+                background-position: 220% 50%;
+            }
         }
 
         .modal {
@@ -948,7 +986,7 @@
             <p class="gate-note">输入访问密码后才可以查看这个邮箱的公开邮件页面。</p>
             <form id="unlockForm" class="gate-form">
                 <input id="accessPasswordInput" class="input" type="password" placeholder="输入访问密码" autocomplete="current-password">
-                <div id="accessTurnstileWrap" class="turnstile-slot hidden">
+                <div id="accessTurnstileWrap" class="turnstile-slot">
                     <div class="turnstile-slot-shell">
                         <div id="accessTurnstileWidget" class="turnstile-widget"></div>
                     </div>
@@ -1209,7 +1247,7 @@
         function toggleAccessTurnstileVisibility(status = shareStatus) {
             const wrap = document.getElementById('accessTurnstileWrap');
             if (!wrap) return;
-            wrap.classList.toggle('hidden', !requiresAccessTurnstile(status));
+            wrap.classList.toggle('is-inactive', !requiresAccessTurnstile(status));
             if (!requiresAccessTurnstile(status)) {
                 setAccessTurnstileHint('');
             }

@@ -100,19 +100,19 @@ docker-compose up -d
 
 ### 账户管理
 
-![账户管理](docs/images/account-management.jpg)
+![账户管理看板](<static/assets/img/账户管理看板.jpg>)
 
-![添加账户](<docs/images/add account.jpg>)
+![单个标签管理](<static/assets/img/单个标签管理.jpg>)
 
-![批量添加账户](docs/images/account-add.jpg)
+![批量导入账户](<static/assets/img/批量导入账户.jpg>)
 
 ### 邮件与 API
 
-![邮件列表](docs/images/email-list.jpg)
+![邮件列表与详情](<static/assets/img/邮件列表 & 详情.jpg>)
 
-![API 密钥](docs/images/api-key.jpg)
+![API 密钥中心](<static/assets/img/API密钥中心.jpg>)
 
-![API 文档](docs/images/api-docs.jpg)
+![交互式 API 文档](<static/assets/img/交互式API文档.jpg>)
 
 <a id="deployment-notes"></a>
 ## 线上部署前必看
@@ -315,7 +315,12 @@ Microsoft-Email-Manager/
 ├─ main.py
 ├─ static/
 │  ├─ index.html
-│  └─ favicon.ico
+│  ├─ home.html
+│  ├─ open.html
+│  ├─ favicon.ico
+│  └─ assets/
+│     ├─ img/
+│     └─ icons/
 ├─ docs/
 │  └─ images/
 ├─ data/

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Microsoft-Email-Manager | 批量管理 Microsoft 邮箱账户 · 邮件自动化后台</title>
+    <title>Microsoft-Email-Manager | 批量管理 微软邮箱账户 · 邮件与 API 自动化中枢</title>
     <link rel="icon" type="image/png" href="/static/assets/logo.png?v=20260406">
     <link rel="shortcut icon" type="image/png" href="/static/assets/logo.png?v=20260406">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
@@ -147,11 +147,13 @@
         .copy-btn:active {
             transform: scale(0.96);
         }
-        .screenshot-grid img {
+        .screenshot-grid img,
+        .screenshot-group .lightbox-img {
             transition: transform 0.25s ease, box-shadow 0.25s ease;
             cursor: pointer;
         }
-        .screenshot-grid img:hover {
+        .screenshot-grid img:hover,
+        .screenshot-group .lightbox-img:hover {
             transform: scale(1.02);
             box-shadow: 0 20px 30px -12px rgba(0,0,0,0.25);
         }
@@ -444,42 +446,42 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 screenshot-group">
                 <div class="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-200 transition">
-                    <img src="https://your-image-host.com/account-management.jpg" alt="账户管理看板" class="w-full h-48 object-cover bg-gray-100 lightbox-img" data-src="https://your-image-host.com/account-management.jpg" onerror="this.onerror=null;this.src='https://placehold.co/600x400/1e3a5f/white?text=Account+Management'">
+                    <img src="/static/assets/img/%E8%B4%A6%E6%88%B7%E7%AE%A1%E7%90%86%E7%9C%8B%E6%9D%BF.jpg" alt="账户管理看板" class="w-full h-56 object-contain bg-slate-100 p-2 lightbox-img" data-src="/static/assets/img/%E8%B4%A6%E6%88%B7%E7%AE%A1%E7%90%86%E7%9C%8B%E6%9D%BF.jpg">
                     <div class="p-4">
                         <p class="font-bold text-gray-800"><i class="fas fa-address-card text-sky-500 mr-2"></i>账户管理看板</p>
                         <p class="text-sm text-gray-500">邮件统计、快速筛选、删除/标签管理</p>
                     </div>
                 </div>
                 <div class="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-200">
-                    <img src="https://your-image-host.com/email-list.jpg" alt="邮件列表" class="w-full h-48 object-cover bg-gray-100 lightbox-img" data-src="https://your-image-host.com/email-list.jpg" onerror="this.onerror=null;this.src='https://placehold.co/600x400/1e3a5f/white?text=Email+List'">
+                    <img src="/static/assets/img/%E9%82%AE%E4%BB%B6%E5%88%97%E8%A1%A8%20%26%20%E8%AF%A6%E6%83%85.jpg" alt="邮件列表" class="w-full h-56 object-contain bg-slate-100 p-2 lightbox-img" data-src="/static/assets/img/%E9%82%AE%E4%BB%B6%E5%88%97%E8%A1%A8%20%26%20%E8%AF%A6%E6%83%85.jpg">
                     <div class="p-4">
                         <p class="font-bold text-gray-800"><i class="fas fa-inbox text-sky-500 mr-2"></i>邮件列表 & 详情</p>
                         <p class="text-sm text-gray-500">查看收件箱/垃圾箱，支持全文搜索与附件标识</p>
                     </div>
                 </div>
                 <div class="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-200">
-                    <img src="https://your-image-host.com/api-key.jpg" alt="API密钥管理" class="w-full h-48 object-cover bg-gray-100 lightbox-img" data-src="https://your-image-host.com/api-key.jpg" onerror="this.onerror=null;this.src='https://placehold.co/600x400/1e3a5f/white?text=API+Keys'">
+                    <img src="/static/assets/img/API%E5%AF%86%E9%92%A5%E4%B8%AD%E5%BF%83.jpg" alt="API密钥管理" class="w-full h-56 object-contain bg-slate-100 p-2 lightbox-img" data-src="/static/assets/img/API%E5%AF%86%E9%92%A5%E4%B8%AD%E5%BF%83.jpg">
                     <div class="p-4">
                         <p class="font-bold text-gray-800"><i class="fas fa-key text-sky-500 mr-2"></i>API密钥中心</p>
                         <p class="text-sm text-gray-500">创建密钥、额度限制、调用记录追溯</p>
                     </div>
                 </div>
                 <div class="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-200">
-                    <img src="https://your-image-host.com/account-add.jpg" alt="批量添加账户" class="w-full h-48 object-cover bg-gray-100 lightbox-img" data-src="https://your-image-host.com/account-add.jpg" onerror="this.onerror=null;this.src='https://placehold.co/600x400/1e3a5f/white?text=Bulk+Import'">
+                    <img src="/static/assets/img/%E6%89%B9%E9%87%8F%E5%AF%BC%E5%85%A5%E8%B4%A6%E6%88%B7.jpg" alt="批量添加账户" class="w-full h-56 object-contain bg-slate-100 p-2 lightbox-img" data-src="/static/assets/img/%E6%89%B9%E9%87%8F%E5%AF%BC%E5%85%A5%E8%B4%A6%E6%88%B7.jpg">
                     <div class="p-4">
                         <p class="font-bold text-gray-800"><i class="fas fa-layer-group text-sky-500 mr-2"></i>批量导入账户</p>
                         <p class="text-sm text-gray-500">每行格式: 邮箱----refresh_token----client_id 快速添加</p>
                     </div>
                 </div>
                 <div class="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-200">
-                    <img src="https://your-image-host.com/api-docs.jpg" alt="API文档" class="w-full h-48 object-cover bg-gray-100 lightbox-img" data-src="https://your-image-host.com/api-docs.jpg" onerror="this.onerror=null;this.src='https://placehold.co/600x400/1e3a5f/white?text=API+Documentation'">
+                    <img src="/static/assets/img/%E4%BA%A4%E4%BA%92%E5%BC%8FAPI%E6%96%87%E6%A1%A3.jpg" alt="API文档" class="w-full h-56 object-contain bg-slate-100 p-2 lightbox-img" data-src="/static/assets/img/%E4%BA%A4%E4%BA%92%E5%BC%8FAPI%E6%96%87%E6%A1%A3.jpg">
                     <div class="p-4">
                         <p class="font-bold text-gray-800"><i class="fas fa-file-alt text-sky-500 mr-2"></i>交互式API文档</p>
                         <p class="text-sm text-gray-500">在线调试，Bearer Token 一键试用</p>
                     </div>
                 </div>
                 <div class="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-200">
-                    <img src="https://your-image-host.com/add-account.jpg" alt="添加单个账户" class="w-full h-48 object-cover bg-gray-100 lightbox-img" data-src="https://your-image-host.com/add-account.jpg" onerror="this.onerror=null;this.src='https://placehold.co/600x400/1e3a5f/white?text=Add+Account'">
+                    <img src="/static/assets/img/%E5%8D%95%E4%B8%AA%E6%A0%87%E7%AD%BE%E7%AE%A1%E7%90%86.jpg" alt="添加单个账户" class="w-full h-56 object-contain bg-slate-100 p-2 lightbox-img" data-src="/static/assets/img/%E5%8D%95%E4%B8%AA%E6%A0%87%E7%AD%BE%E7%AE%A1%E7%90%86.jpg">
                     <div class="p-4">
                         <p class="font-bold text-gray-800"><i class="fas fa-plus-circle text-sky-500 mr-2"></i>单个/标签管理</p>
                         <p class="text-sm text-gray-500">支持标签分类，测试连接功能</p>
