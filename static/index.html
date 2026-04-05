@@ -2453,8 +2453,10 @@
             border-radius: 0;
             background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
             box-shadow: 0 10px 20px rgba(37, 99, 235, 0.24);
+            overflow: hidden;
         }
 
+        .account-avatar.has-avatar,
         .email-avatar.has-avatar,
         .email-detail-avatar.has-avatar {
             background: transparent;
@@ -2529,6 +2531,7 @@
             font-weight: 700;
             box-shadow: 0 14px 26px rgba(37, 99, 235, 0.24);
             flex-shrink: 0;
+            overflow: hidden;
         }
 
         .email-detail-hero-copy {
@@ -2566,6 +2569,7 @@
             border-radius: inherit;
         }
 
+        .account-avatar img,
         .email-avatar img,
         .email-detail-avatar img {
             width: 100%;
@@ -2573,6 +2577,15 @@
             object-fit: cover;
             display: block;
             border-radius: inherit;
+        }
+
+        .account-avatar .avatar-brand-icon,
+        .email-avatar .avatar-brand-icon,
+        .email-detail-avatar .avatar-brand-icon {
+            width: 68%;
+            height: 68%;
+            object-fit: contain;
+            filter: drop-shadow(0 6px 12px rgba(15, 23, 42, 0.14));
         }
 
         .email-meta-icon {
@@ -5310,6 +5323,8 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
             { keywords: ['kuwo.cn'], domain: 'kuwo.cn' }
         ];
 
+        const LOBEHUB_MICROSOFT_ICON_URL = '/static/assets/icons/microsoft.svg';
+
         function getSenderProfile(fromValue = '') {
             const rawValue = String(fromValue || '').trim();
             const match = rawValue.match(/^(.*?)(?:<([^>]+)>)?$/);
@@ -5341,16 +5356,19 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
             const safeInitial = escapeHtml(initial || '?');
             const safeUrl = avatarUrl ? escapeHtml(avatarUrl) : '';
             const safeFallbackUrl = fallbackUrl ? escapeHtml(fallbackUrl) : '';
+            const safeBrandIconUrl = escapeHtml(LOBEHUB_MICROSOFT_ICON_URL);
             const hasAvatar = Boolean(avatarUrl);
-            const fallbackClass = hasAvatar ? 'avatar-fallback hidden' : 'avatar-fallback';
+            const fallbackClass = 'avatar-fallback hidden';
+            const brandIconClass = hasAvatar ? 'avatar-brand-icon hidden' : 'avatar-brand-icon';
             const avatarClassName = hasAvatar ? `${className} has-avatar` : className;
             const imageMarkup = hasAvatar
-                ? `<img src="${safeUrl}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback-src="${safeFallbackUrl}" onerror="const fallbackUrl = this.getAttribute('data-fallback-src'); if (fallbackUrl && this.src !== fallbackUrl) { this.src = fallbackUrl; this.removeAttribute('data-fallback-src'); return; } this.remove(); const fallback = this.parentElement.querySelector('.avatar-fallback'); if (fallback) fallback.classList.remove('hidden');">`
+                ? `<img src="${safeUrl}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback-src="${safeFallbackUrl}" onerror="const fallbackUrl = this.getAttribute('data-fallback-src'); if (fallbackUrl && this.src !== fallbackUrl) { this.src = fallbackUrl; this.removeAttribute('data-fallback-src'); return; } this.remove(); const brandIcon = this.parentElement.querySelector('.avatar-brand-icon'); if (brandIcon) { brandIcon.classList.remove('hidden'); return; } const fallback = this.parentElement.querySelector('.avatar-fallback'); if (fallback) fallback.classList.remove('hidden');">`
                 : '';
 
             return `
                 <div class="${avatarClassName}">
                     ${imageMarkup}
+                    <img src="${safeBrandIconUrl}" alt="" class="${brandIconClass}" loading="lazy" onerror="this.remove(); const fallback = this.parentElement.querySelector('.avatar-fallback'); if (fallback) fallback.classList.remove('hidden');">
                     <span class="${fallbackClass}">${safeInitial}</span>
                 </div>
             `;
@@ -6559,7 +6577,7 @@ example3@live.com----refresh_token3----client_id3`;
                     return `
                         <div class="account-item" onclick="viewAccountEmails('${account.email_id}')" oncontextmenu="showAccountContextMenu(event, '${account.email_id}')">
                             <div class="account-info">
-                                <div class="account-avatar">${account.email_id.charAt(0).toUpperCase()}</div>
+                                ${renderSenderAvatar(account.email_id.charAt(0).toUpperCase(), '', 'account-avatar')}
                                 <div class="account-details">
                                     <h4>${account.email_id}</h4>
                                     <p>接入方式: <strong>${authMethodLabel}</strong> · 健康状态: <strong style="color: ${health.color};">${health.label}</strong> · ${health.score} 分</p>
