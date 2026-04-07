@@ -1,5 +1,5 @@
 # 使用Python 3.11 Alpine作为基础镜像，体积更小
-FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/python:3.11-alpine3.21
+FROM python:3.11-alpine3.21
 
 # 设置工作目录
 WORKDIR /app
