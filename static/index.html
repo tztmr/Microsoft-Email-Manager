@@ -5938,13 +5938,25 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
                     <div class="form-group" style="background: #f0fdf4; padding: 12px; border-radius: 6px; border: 1px solid #bbf7d0;">
                         已选中 <strong id="batchPublicShareCount" style="color: #16a34a;">0</strong> 个账户，将为它们统一应用以下设置。
                     </div>
-                    <div class="form-group">
-                        <label class="public-share-inline">
-                            <input type="checkbox" id="batchPublicShareEnabled">
-                            <span>启用公开页面</span>
-                        </label>
-                        <div class="public-share-help">关闭后，这些账户的公开链接会立即失效。</div>
+                    
+                    <div id="batchPublicShareProgress" class="hidden mb-4">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+                            <span id="batchPublicShareProgressText">准备更新...</span>
+                            <span id="batchPublicShareProgressCount">0 / 0</span>
+                        </div>
+                        <div style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                            <div id="batchPublicShareProgressFill" style="width: 0%; height: 100%; background: #3b82f6; transition: width 0.2s;"></div>
+                        </div>
                     </div>
+                    
+                    <div id="batchPublicShareFormContent">
+                        <div class="form-group">
+                            <label class="public-share-inline">
+                                <input type="checkbox" id="batchPublicShareEnabled">
+                                <span>启用公开页面</span>
+                            </label>
+                            <div class="public-share-help">关闭后，这些账户的公开链接会立即失效。</div>
+                        </div>
                     <div class="form-group">
                         <label class="form-label" for="batchPublicShareExpiresMode">公开时长</label>
                         <select id="batchPublicShareExpiresMode" class="form-input" onchange="toggleBatchPublicShareExpiryMode()">
@@ -5965,11 +5977,12 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
                             <span>清除已有的访问密码</span>
                         </label>
                     </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeBatchPublicShareModal()">取消</button>
-                <button class="btn btn-primary" onclick="saveBatchPublicShareConfig()">确认批量设置</button>
+                <button class="btn btn-secondary" onclick="closeBatchPublicShareModal()" id="batchPublicShareCancelBtn">取消</button>
+                <button class="btn btn-primary" onclick="saveBatchPublicShareConfig()" id="batchPublicShareSaveBtn">确认批量设置</button>
             </div>
         </div>
     </div>
@@ -10672,6 +10685,15 @@ Authorization: Bearer om_your_api_key
             toggleBatchPublicSharePasswordActions();
             
             document.getElementById('batchPublicShareModal').classList.remove('hidden');
+            document.getElementById('batchPublicShareFormContent').classList.remove('hidden');
+            document.getElementById('batchPublicShareProgress').classList.add('hidden');
+            
+            // 重置进度条状态
+            document.getElementById('batchPublicShareProgressFill').style.width = '0%';
+            document.getElementById('batchPublicShareProgressCount').textContent = '0 / ' + selected.length;
+            document.getElementById('batchPublicShareProgressText').textContent = '准备更新...';
+            
+            document.getElementById('batchPublicShareSaveBtn').disabled = false;
         }
 
         function closeBatchPublicShareModal() {
@@ -10754,8 +10776,20 @@ Authorization: Bearer om_your_api_key
             
             let successCount = 0;
             let failCount = 0;
+            const totalAccounts = currentBatchPublicShareAccounts.length;
             
-            for (const emailId of currentBatchPublicShareAccounts) {
+            document.getElementById('batchPublicShareFormContent').classList.add('hidden');
+            const progressContainer = document.getElementById('batchPublicShareProgress');
+            progressContainer.classList.remove('hidden');
+            const progressFill = document.getElementById('batchPublicShareProgressFill');
+            const progressCount = document.getElementById('batchPublicShareProgressCount');
+            const progressText = document.getElementById('batchPublicShareProgressText');
+            
+            const saveBtn = document.getElementById('batchPublicShareSaveBtn');
+            saveBtn.disabled = true;
+            
+            for (let i = 0; i < totalAccounts; i++) {
+                const emailId = currentBatchPublicShareAccounts[i];
                 try {
                     await apiRequest('/api/public-shares/' + encodeURIComponent(emailId), {
                         method: 'PUT',
@@ -10766,14 +10800,21 @@ Authorization: Bearer om_your_api_key
                     failCount++;
                     console.error('Batch public share update error for ' + emailId, error);
                 }
+                
+                const percentage = Math.round(((i + 1) / totalAccounts) * 100);
+                progressFill.style.width = percentage + '%';
+                progressCount.textContent = `${i + 1} / ${totalAccounts}`;
+                progressText.textContent = `正在处理: ${emailId}`;
             }
             
-            closeBatchPublicShareModal();
-            if (failCount === 0) {
-                showNotification(`成功更新 ${successCount} 个账户的公开页面设置`, 'success');
-            } else {
-                showNotification(`更新完成：成功 ${successCount} 个，失败 ${failCount} 个`, 'warning');
-            }
+            setTimeout(() => {
+                closeBatchPublicShareModal();
+                if (failCount === 0) {
+                    showNotification(`成功更新 ${successCount} 个账户的公开页面设置`, 'success');
+                } else {
+                    showNotification(`更新完成：成功 ${successCount} 个，失败 ${failCount} 个`, 'warning');
+                }
+            }, 500);
         }
         // ================= End Batch Operations =================
 
