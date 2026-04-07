@@ -5864,7 +5864,7 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
         <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header">
                 <h3>管理账户分类与标签</h3>
-                <span class="close" onclick="closeTagsModal()">&times;</span>
+                <span class="close" style="cursor: pointer;" onclick="closeTagsModal()">&times;</span>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -7757,19 +7757,19 @@ example3@live.com----refresh_token3----client_id3`;
                                 </div>
                             </div>
                             <div class="account-actions" onclick="event.stopPropagation()">
-                                <button class="btn btn-primary btn-sm" onclick="viewAccountEmails('${account.email_id}')">
+                                <button class="btn btn-primary btn-sm" type="button" onclick="viewAccountEmails('${account.email_id}')">
                                     <span></span>
                                     查看邮件
                                 </button>
-                                <button class="btn btn-secondary btn-sm" onclick="openPublicShareModal('${account.email_id}')">
+                                <button class="btn btn-secondary btn-sm" type="button" onclick="openPublicShareModal('${account.email_id}')">
                                     <span></span>
                                     公开页面
                                 </button>
-                                <button class="btn btn-secondary btn-sm" onclick="editAccountTags('${account.email_id}')">
+                                <button class="btn btn-secondary btn-sm" type="button" onclick="editAccountTags('${account.email_id}')">
                                     <span></span>
                                     管理分类
                                 </button>
-                                <button class="btn btn-danger btn-sm" onclick="deleteAccount('${account.email_id}')">
+                                <button class="btn btn-danger btn-sm" type="button" onclick="deleteAccount('${account.email_id}')">
                                     <span></span>
                                     删除
                                 </button>
@@ -10041,7 +10041,7 @@ Authorization: Bearer om_your_api_key
                 showSuccess('账户分类与标签更新成功');
                 closeTagsModal();
 
-                loadAccounts();
+                loadAccounts(accountsCurrentPage);
             } catch (error) {
                 showError('更新账户分类失败: ' + error.message);
             }
