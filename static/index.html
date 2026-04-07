@@ -1,4 +1,4 @@
-﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -7671,6 +7671,11 @@ example3@live.com----refresh_token3----client_id3`;
             }
             
             accountsCurrentPage = page;
+            
+            const selectElement = document.getElementById('pageSizeSelect');
+            if (selectElement && selectElement.value) {
+                accountsPageSize = parseInt(selectElement.value) || 10;
+            }
             
             const accountsList = document.getElementById('accountsList');
             const accountsStats = document.getElementById('accountsStats');
