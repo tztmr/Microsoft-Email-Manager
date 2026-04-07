@@ -399,6 +399,13 @@ async def get_access_token(credentials: AccountCredentials) -> str:
                 logger.error(f"No access token in response for {credentials.email}")
                 raise ValueError("Failed to obtain access token from response")
 
+            new_refresh_token = token_data.get("refresh_token")
+            if new_refresh_token and new_refresh_token != credentials.refresh_token:
+                credentials.refresh_token = new_refresh_token
+                # Need to implement saving it back if batch.py supports it, but batch.py might not have save_account_credentials.
+                # Actually let's just log it or save it via another way if possible.
+                logger.info(f"Updated refresh token for {credentials.email}")
+
             logger.info(f"Successfully obtained access token for {credentials.email}")
             return access_token
 

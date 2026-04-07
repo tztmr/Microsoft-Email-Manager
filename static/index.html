@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -6,6 +6,7 @@
     <title>Microsoft-Email-Manager</title>
     <link rel="icon" type="image/png" href="/static/assets/logo.png?v=20260406">
     <link rel="shortcut icon" type="image/png" href="/static/assets/logo.png?v=20260406">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -4657,7 +4658,7 @@
                             </div>
                             
                             <!-- 批量操作栏 -->
-                            <div class="flex items-center gap-4 mb-2 p-2" style="background-color: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+                            <div class="flex items-center gap-4 mb-2 p-2" style="background-color: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; flex-wrap: wrap;">
                                 <label class="flex items-center gap-2 cursor-pointer text-sm font-medium" style="margin-bottom: 0;">
                                     <input type="checkbox" id="selectAllAccountsCheckbox" onchange="toggleSelectAllAccounts(this.checked)">
                                     本页全选
@@ -4665,12 +4666,23 @@
                                 <span class="text-sm text-gray-500" style="margin-left: 10px; margin-right: auto;">
                                     已选中 <strong id="selectedAccountsCount">0</strong> 个账户
                                 </span>
-                                <button class="btn btn-secondary btn-sm" onclick="exportAccounts()">
-                                    <span></span>批量导出 (所有/选中)
-                                </button>
-                                <button class="btn btn-secondary btn-sm" onclick="openBatchPublicShareModal()">
-                                    <span></span>批量公开页面设置
-                                </button>
+                                <div class="flex gap-2 flex-wrap">
+                                    <button class="btn btn-secondary btn-sm" onclick="exportAccounts()">
+                                        <span></span>批量导出
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="exportPublicLinksXlsx()">
+                                        <span></span>导出公开链接 (XLSX)
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="openBatchClassificationModal()">
+                                        <span></span>批量分类
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="openBatchPublicShareModal()">
+                                        <span></span>批量公开页面
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" onclick="batchDeleteAccounts()">
+                                        <span></span>批量删除
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         
@@ -5867,6 +5879,41 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeTagsModal()">取消</button>
                 <button class="btn btn-primary" onclick="saveAccountTags()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="batchClassificationModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>批量修改账户分类与标签</h3>
+                <span class="close" onclick="closeBatchClassificationModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group" style="background: #f0fdf4; padding: 12px; border-radius: 6px; border: 1px solid #bbf7d0;">
+                    已选中 <strong id="batchClassificationCount" style="color: #16a34a;">0</strong> 个账户，将为它们统一设置以下分类和标签。
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="batchEditAccountCategoryKey">统一分类（不选则清除分类）</label>
+                    <select id="batchEditAccountCategoryKey" class="form-input">
+                        <option value="">不分类</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="flex items-center justify-between">
+                        <label class="form-label" style="margin-bottom: 0;">统一标签</label>
+                        <button class="btn btn-secondary btn-sm" type="button" onclick="showPage('classifications'); closeBatchClassificationModal();">
+                            <span></span>
+                            去分类编辑
+                        </button>
+                    </div>
+                    <div id="batchEditTagsList" class="option-grid"></div>
+                    <div id="batchEditTagsEmpty" class="selection-empty hidden">暂无标签，请先创建标签。</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeBatchClassificationModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveBatchAccountTags()">确认批量修改</button>
             </div>
         </div>
     </div>
@@ -10709,6 +10756,156 @@ Authorization: Bearer om_your_api_key
             }
         }
         // ================= End Batch Operations =================
+
+        // ================= New Batch Features =================
+        async function exportPublicLinksXlsx() {
+            const selected = getSelectedAccounts();
+            if (selected.length === 0) {
+                showNotification('请先选择至少一个账户导出公开链接', 'warning');
+                return;
+            }
+            
+            const wb = XLSX.utils.book_new();
+            const data = [["邮箱账号", "公开页面链接"]];
+            const baseUrl = window.location.origin + '/open/emails/';
+            
+            for (const email of selected) {
+                data.push([email, baseUrl + encodeURIComponent(email)]);
+            }
+            
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            XLSX.utils.book_append_sheet(wb, ws, "公开页面链接");
+            
+            XLSX.writeFile(wb, `public_links_${new Date().getTime()}.xlsx`);
+            showNotification('成功导出公开链接', 'success');
+        }
+
+        let currentBatchClassificationAccounts = [];
+        let batchClassificationTags = new Set();
+
+        function openBatchClassificationModal() {
+            const selected = getSelectedAccounts();
+            if (selected.length === 0) {
+                showNotification('请先选择至少一个账户', 'warning');
+                return;
+            }
+            
+            currentBatchClassificationAccounts = selected;
+            document.getElementById('batchClassificationCount').textContent = selected.length;
+            batchClassificationTags.clear();
+            
+            const categorySelect = document.getElementById('batchEditAccountCategoryKey');
+            categorySelect.innerHTML = '<option value="">不分类</option>' + Object.keys(classifications.categories || {}).map(key => {
+                const category = classifications.categories[key];
+                return `<option value="${escapeHtml(key)}">${escapeHtml(getCategoryLabel(category))}</option>`;
+            }).join('');
+            
+            const tagsList = document.getElementById('batchEditTagsList');
+            const tagsEmpty = document.getElementById('batchEditTagsEmpty');
+            const availableTags = Object.keys(classifications.tags || {});
+            
+            if (availableTags.length === 0) {
+                tagsList.classList.add('hidden');
+                tagsEmpty.classList.remove('hidden');
+            } else {
+                tagsList.classList.remove('hidden');
+                tagsEmpty.classList.add('hidden');
+                tagsList.innerHTML = availableTags.map(key => {
+                    const tag = classifications.tags[key];
+                    return `
+                        <label class="tag-checkbox">
+                            <input type="checkbox" value="${escapeHtml(key)}" onchange="toggleBatchClassificationTag('${escapeHtml(key)}', this.checked)">
+                            <span>${escapeHtml(getTagLabel(tag))}</span>
+                        </label>
+                    `;
+                }).join('');
+            }
+            
+            document.getElementById('batchClassificationModal').classList.remove('hidden');
+        }
+
+        function closeBatchClassificationModal() {
+            document.getElementById('batchClassificationModal').classList.add('hidden');
+            currentBatchClassificationAccounts = [];
+        }
+
+        function toggleBatchClassificationTag(key, isChecked) {
+            if (isChecked) {
+                batchClassificationTags.add(key);
+            } else {
+                batchClassificationTags.delete(key);
+            }
+        }
+
+        async function saveBatchAccountTags() {
+            if (currentBatchClassificationAccounts.length === 0) return;
+            
+            const categoryKey = document.getElementById('batchEditAccountCategoryKey').value || null;
+            const tagKeys = Array.from(batchClassificationTags);
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (const emailId of currentBatchClassificationAccounts) {
+                try {
+                    await apiRequest('/accounts/' + encodeURIComponent(emailId) + '/classification', {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            category_key: categoryKey,
+                            tag_keys: tagKeys
+                        })
+                    });
+                    successCount++;
+                } catch (error) {
+                    failCount++;
+                    console.error('Batch classification error for ' + emailId, error);
+                }
+            }
+            
+            closeBatchClassificationModal();
+            if (failCount === 0) {
+                showNotification(`成功修改 ${successCount} 个账户的分类和标签`, 'success');
+            } else {
+                showNotification(`修改完成：成功 ${successCount} 个，失败 ${failCount} 个`, 'warning');
+            }
+            loadAccounts();
+        }
+
+        async function batchDeleteAccounts() {
+            const selected = getSelectedAccounts();
+            if (selected.length === 0) {
+                showNotification('请先选择至少一个账户', 'warning');
+                return;
+            }
+            
+            if (!confirm(`确定要删除选中的 ${selected.length} 个账户吗？此操作不可恢复。`)) {
+                return;
+            }
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (const emailId of selected) {
+                try {
+                    await apiRequest('/accounts/' + encodeURIComponent(emailId), { method: 'DELETE' });
+                    successCount++;
+                } catch (error) {
+                    failCount++;
+                    console.error('Batch delete error for ' + emailId, error);
+                }
+            }
+            
+            if (failCount === 0) {
+                showNotification(`成功删除 ${successCount} 个账户`, 'success');
+            } else {
+                showNotification(`删除完成：成功 ${successCount} 个，失败 ${failCount} 个`, 'warning');
+            }
+            
+            document.getElementById('selectAllAccountsCheckbox').checked = false;
+            document.getElementById('selectAllAccountsCheckbox').indeterminate = false;
+            loadAccounts();
+        }
+        // ================= End New Batch Features =================
 
     </script>
 </body>

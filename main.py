@@ -2336,6 +2336,12 @@ async def get_access_token(credentials: AccountCredentials) -> str:
                                 detail="Failed to obtain access token from response",
                             )
 
+                        new_refresh_token = token_data.get("refresh_token")
+                        if new_refresh_token and new_refresh_token != credentials.refresh_token:
+                            credentials.refresh_token = new_refresh_token
+                            await save_account_credentials(credentials.email, credentials)
+                            logger.info(f"Updated refresh token for {credentials.email}")
+
                         logger.info(
                             "Successfully obtained %s access token for %s via %s",
                             auth_method,
