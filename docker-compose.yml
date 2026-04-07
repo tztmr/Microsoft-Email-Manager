@@ -1,6 +1,6 @@
 services:
   outlook-email-client:
-    image: maishanhub/outlookmanager:main
+    build: .
     container_name: outlook-email-api
     ports:
       - "8073:8000"
