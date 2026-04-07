@@ -10906,8 +10906,18 @@ Authorization: Bearer om_your_api_key
             
             let successCount = 0;
             let failCount = 0;
+            const totalAccounts = currentBatchClassificationAccounts.length;
             
-            for (const emailId of currentBatchClassificationAccounts) {
+            // UI elements for progress
+            const saveBtn = document.querySelector('#batchClassificationModal .btn-primary');
+            const cancelBtn = document.querySelector('#batchClassificationModal .btn-secondary');
+            const originalBtnText = saveBtn.innerHTML;
+            saveBtn.disabled = true;
+            cancelBtn.disabled = true;
+            saveBtn.innerHTML = buttonLabel('loading', '正在处理...', 'spinning');
+            
+            for (let i = 0; i < totalAccounts; i++) {
+                const emailId = currentBatchClassificationAccounts[i];
                 try {
                     await apiRequest('/accounts/' + encodeURIComponent(emailId) + '/classification', {
                         method: 'PUT',
@@ -10921,7 +10931,14 @@ Authorization: Bearer om_your_api_key
                     failCount++;
                     console.error('Batch classification error for ' + emailId, error);
                 }
+                
+                // Update button text to show progress
+                saveBtn.innerHTML = buttonLabel('loading', `处理中 (${i + 1}/${totalAccounts})...`, 'spinning');
             }
+            
+            saveBtn.disabled = false;
+            cancelBtn.disabled = false;
+            saveBtn.innerHTML = originalBtnText;
             
             closeBatchClassificationModal();
             if (failCount === 0) {
@@ -10929,7 +10946,7 @@ Authorization: Bearer om_your_api_key
             } else {
                 showNotification(`修改完成：成功 ${successCount} 个，失败 ${failCount} 个`, 'warning');
             }
-            loadAccounts();
+            loadAccounts(accountsCurrentPage);
         }
 
         async function batchDeleteAccounts() {
@@ -10945,8 +10962,16 @@ Authorization: Bearer om_your_api_key
             
             let successCount = 0;
             let failCount = 0;
+            const totalAccounts = selected.length;
             
-            for (const emailId of selected) {
+            // UI Update for progress
+            const deleteBtn = document.querySelector('button[onclick="batchDeleteAccounts()"]');
+            const originalBtnHtml = deleteBtn.innerHTML;
+            deleteBtn.disabled = true;
+            deleteBtn.innerHTML = buttonLabel('loading', '正在删除...', 'spinning');
+            
+            for (let i = 0; i < totalAccounts; i++) {
+                const emailId = selected[i];
                 try {
                     await apiRequest('/accounts/' + encodeURIComponent(emailId), { method: 'DELETE' });
                     successCount++;
@@ -10954,7 +10979,12 @@ Authorization: Bearer om_your_api_key
                     failCount++;
                     console.error('Batch delete error for ' + emailId, error);
                 }
+                
+                deleteBtn.innerHTML = buttonLabel('loading', `正在删除 (${i + 1}/${totalAccounts})...`, 'spinning');
             }
+            
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = originalBtnHtml;
             
             if (failCount === 0) {
                 showNotification(`成功删除 ${successCount} 个账户`, 'success');
@@ -10964,7 +10994,7 @@ Authorization: Bearer om_your_api_key
             
             document.getElementById('selectAllAccountsCheckbox').checked = false;
             document.getElementById('selectAllAccountsCheckbox').indeterminate = false;
-            loadAccounts();
+            loadAccounts(accountsCurrentPage);
         }
         // ================= End New Batch Features =================
 
