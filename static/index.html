@@ -1628,7 +1628,6 @@
             border-color: #1d4ed8;
             color: #ffffff;
         }
-        }
 
         /* 标签管理样式 */
         /* 修改标签模态框样式 */
@@ -4656,6 +4655,23 @@
                                     清空
                                 </button>
                             </div>
+                            
+                            <!-- 批量操作栏 -->
+                            <div class="flex items-center gap-4 mb-2 p-2" style="background-color: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                <label class="flex items-center gap-2 cursor-pointer text-sm font-medium" style="margin-bottom: 0;">
+                                    <input type="checkbox" id="selectAllAccountsCheckbox" onchange="toggleSelectAllAccounts(this.checked)">
+                                    本页全选
+                                </label>
+                                <span class="text-sm text-gray-500" style="margin-left: 10px; margin-right: auto;">
+                                    已选中 <strong id="selectedAccountsCount">0</strong> 个账户
+                                </span>
+                                <button class="btn btn-secondary btn-sm" onclick="exportAccounts()">
+                                    <span></span>批量导出 (所有/选中)
+                                </button>
+                                <button class="btn btn-secondary btn-sm" onclick="openBatchPublicShareModal()">
+                                    <span></span>批量公开页面设置
+                                </button>
+                            </div>
                         </div>
                         
                         <!-- 统计信息 -->
@@ -5851,6 +5867,53 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeTagsModal()">取消</button>
                 <button class="btn btn-primary" onclick="saveAccountTags()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="batchPublicShareModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header">
+                <h3>批量公开页面设置</h3>
+                <button class="modal-close" type="button" onclick="closeBatchPublicShareModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="public-share-grid">
+                    <div class="form-group" style="background: #f0fdf4; padding: 12px; border-radius: 6px; border: 1px solid #bbf7d0;">
+                        已选中 <strong id="batchPublicShareCount" style="color: #16a34a;">0</strong> 个账户，将为它们统一应用以下设置。
+                    </div>
+                    <div class="form-group">
+                        <label class="public-share-inline">
+                            <input type="checkbox" id="batchPublicShareEnabled">
+                            <span>启用公开页面</span>
+                        </label>
+                        <div class="public-share-help">关闭后，这些账户的公开链接会立即失效。</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="batchPublicShareExpiresMode">公开时长</label>
+                        <select id="batchPublicShareExpiresMode" class="form-input" onchange="toggleBatchPublicShareExpiryMode()">
+                            <option value="never">一直公开</option>
+                            <option value="fixed">设置截止时间</option>
+                        </select>
+                    </div>
+                    <div class="form-group hidden" id="batchPublicShareExpiresAtWrap">
+                        <label class="form-label" for="batchPublicShareExpiresAt">截止时间</label>
+                        <input type="datetime-local" id="batchPublicShareExpiresAt" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="batchPublicSharePassword">访问密码</label>
+                        <input type="password" id="batchPublicSharePassword" class="form-input" placeholder="留空表示不修改访问密码">
+                        <input type="password" id="batchPublicSharePasswordConfirm" class="form-input" placeholder="再次输入新访问密码" style="margin-top: 10px;">
+                        <label class="public-share-inline" style="margin-top: 12px;">
+                            <input type="checkbox" id="batchPublicShareClearPassword" onchange="toggleBatchPublicSharePasswordActions()">
+                            <span>清除已有的访问密码</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeBatchPublicShareModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveBatchPublicShareConfig()">确认批量设置</button>
             </div>
         </div>
     </div>
@@ -7607,8 +7670,9 @@ example3@live.com----refresh_token3----client_id3`;
                         : '';
                         
                     return `
-                        <div class="account-item" onclick="viewAccountEmails('${account.email_id}')" oncontextmenu="showAccountContextMenu(event, '${account.email_id}')">
-                            <div class="account-info">
+                        <div class="account-item flex items-center gap-3" onclick="viewAccountEmails('${account.email_id}')" oncontextmenu="showAccountContextMenu(event, '${account.email_id}')">
+                            <input type="checkbox" class="account-checkbox form-checkbox" style="margin-left: 10px; width: 18px; height: 18px;" value="${account.email_id}" onclick="event.stopPropagation()" onchange="updateSelectedAccountsCount()">
+                            <div class="account-info" style="flex: 1;">
                                 ${renderSenderAvatar(account.email_id.charAt(0).toUpperCase(), '', 'account-avatar')}
                                 <div class="account-details">
                                     <h4>${account.email_id}</h4>
@@ -7715,60 +7779,64 @@ example3@live.com----refresh_token3----client_id3`;
 
             let successCount = 0;
             let failCount = 0;
+            let processedCount = 0;
             const results = [];
+            const concurrencyLimit = 10;
+            let currentIndex = 0;
 
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                const parsedLine = parseBatchAccountLine(line, authMethod);
+            const processWorker = async () => {
+                while (currentIndex < lines.length) {
+                    const i = currentIndex++;
+                    const line = lines[i];
+                    const parsedLine = parseBatchAccountLine(line, authMethod);
 
-                // 更新进度
-                updateBatchProgress(i + 1, lines.length, `正在处理第 ${i + 1} 个账户...`);
-
-                if (!parsedLine) {
-                    failCount++;
-                    results.push({
-                        email: line.split('----')[0] || '格式错误',
-                        status: 'error',
-                        message: authMethod === 'graph'
-                            ? '格式错误: Graph API 应为 邮箱----密码----client_id----令牌'
-                            : '格式错误: 应为 邮箱----刷新令牌----客户端ID，或兼容旧格式 邮箱----占位密码----刷新令牌----客户端ID'
-                    });
-                    continue;
+                    if (!parsedLine) {
+                        failCount++;
+                        results.push({
+                            email: line.split('----')[0] || '格式错误',
+                            status: 'error',
+                            message: authMethod === 'graph'
+                                ? '格式错误: Graph API 应为 邮箱----密码----client_id----令牌'
+                                : '格式错误: 应为 邮箱----刷新令牌----客户端ID，或兼容旧格式 邮箱----占位密码----刷新令牌----客户端ID'
+                        });
+                    } else {
+                        const { email, refreshToken, clientId } = parsedLine;
+                        try {
+                            await apiRequest('/accounts', {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    email: email,
+                                    refresh_token: refreshToken,
+                                    client_id: clientId,
+                                    auth_method: authMethod,
+                                    category_key: categoryKey || null,
+                                    tag_keys: tagKeys
+                                })
+                            });
+                            successCount++;
+                            results.push({
+                                email: email,
+                                status: 'success',
+                                message: '添加成功'
+                            });
+                        } catch (error) {
+                            failCount++;
+                            results.push({
+                                email: email,
+                                status: 'error',
+                                message: error.message
+                            });
+                        }
+                    }
+                    processedCount++;
+                    updateBatchProgress(processedCount, lines.length, `正在处理第 ${processedCount} 个账户...`);
                 }
+            };
 
-                const { email, refreshToken, clientId } = parsedLine;
+            const workers = Array(concurrencyLimit).fill(0).map(processWorker);
+            await Promise.all(workers);
 
-                try {
-                    await apiRequest('/accounts', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            email: email,
-                            refresh_token: refreshToken,
-                            client_id: clientId,
-                            auth_method: authMethod,
-                            category_key: categoryKey || null,
-                            tag_keys: tagKeys
-                        })
-                    });
-                    successCount++;
-                    results.push({
-                        email: email,
-                        status: 'success',
-                        message: '添加成功'
-                    });
-                } catch (error) {
-                    failCount++;
-                    results.push({
-                        email: email,
-                        status: 'error',
-                        message: error.message
-                    });
-                }
-
-            await new Promise(resolve => setTimeout(resolve, 100));
-            }
-
-            // 瀹屾垚杩涘害
+            // 完成进度
             updateBatchProgress(lines.length, lines.length, '批量添加完成');
 
             // 显示结果
@@ -10438,6 +10506,209 @@ Authorization: Bearer om_your_api_key
         window.addEventListener('popstate', function() {
             handleUrlRouting();
         });
+
+        // ================= Batch Operations =================
+        function getSelectedAccounts() {
+            const checkboxes = document.querySelectorAll('.account-checkbox:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
+        function toggleSelectAllAccounts(checked) {
+            const checkboxes = document.querySelectorAll('.account-checkbox');
+            checkboxes.forEach(cb => cb.checked = checked);
+            updateSelectedAccountsCount();
+        }
+
+        function updateSelectedAccountsCount() {
+            const count = getSelectedAccounts().length;
+            document.getElementById('selectedAccountsCount').textContent = count;
+            
+            const totalCheckboxes = document.querySelectorAll('.account-checkbox').length;
+            const selectAllCheckbox = document.getElementById('selectAllAccountsCheckbox');
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = count > 0 && count === totalCheckboxes;
+                selectAllCheckbox.indeterminate = count > 0 && count < totalCheckboxes;
+            }
+        }
+
+        async function exportAccounts() {
+            const selected = getSelectedAccounts();
+            if (selected.length > 0) {
+                try {
+                    const response = await apiRequest('/accounts/export');
+                    const csvText = response; // Wait, apiRequest assumes JSON by default unless we modify it or fetch directly
+                    // Let's use direct fetch to be safe, since apiRequest tries to parse JSON.
+                    const token = document.cookie.includes('outlookmanager_session') ? '' : ''; // Actually auth is via cookie or api-key. 
+                } catch (e) {}
+            }
+        }
+        // Actually, let's use standard fetch for CSV download
+        async function exportAccounts() {
+            const selected = getSelectedAccounts();
+            if (selected.length > 0) {
+                try {
+                    const response = await fetch('/accounts/export');
+                    if (!response.ok) throw new Error('导出失败');
+                    const csvText = await response.text();
+                    
+                    const lines = csvText.split('\n');
+                    if (lines.length > 0) {
+                        const header = lines[0];
+                        const filteredLines = lines.slice(1).filter(line => {
+                            if (!line.trim()) return false;
+                            const email = line.split(',')[0];
+                            return selected.includes(email);
+                        });
+                        
+                        const finalCsv = [header, ...filteredLines].join('\n');
+                        downloadCsv(finalCsv, `accounts_export_selected_${new Date().getTime()}.csv`);
+                    }
+                } catch (error) {
+                    showNotification('导出选中账户失败: ' + error.message, 'error');
+                }
+            } else {
+                window.open('/accounts/export', '_blank');
+            }
+        }
+
+        function downloadCsv(csvContent, filename) {
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        let currentBatchPublicShareAccounts = [];
+
+        function openBatchPublicShareModal() {
+            const selected = getSelectedAccounts();
+            if (selected.length === 0) {
+                showNotification('请先选择至少一个账户', 'warning');
+                return;
+            }
+            
+            currentBatchPublicShareAccounts = selected;
+            document.getElementById('batchPublicShareCount').textContent = selected.length;
+            
+            document.getElementById('batchPublicShareEnabled').checked = true;
+            document.getElementById('batchPublicShareExpiresMode').value = 'never';
+            document.getElementById('batchPublicShareExpiresAt').value = '';
+            document.getElementById('batchPublicSharePassword').value = '';
+            document.getElementById('batchPublicSharePasswordConfirm').value = '';
+            document.getElementById('batchPublicShareClearPassword').checked = false;
+            
+            toggleBatchPublicShareExpiryMode();
+            toggleBatchPublicSharePasswordActions();
+            
+            document.getElementById('batchPublicShareModal').classList.remove('hidden');
+        }
+
+        function closeBatchPublicShareModal() {
+            document.getElementById('batchPublicShareModal').classList.add('hidden');
+            currentBatchPublicShareAccounts = [];
+        }
+
+        function toggleBatchPublicShareExpiryMode() {
+            const mode = document.getElementById('batchPublicShareExpiresMode').value;
+            const wrap = document.getElementById('batchPublicShareExpiresAtWrap');
+            if (mode === 'fixed') {
+                wrap.classList.remove('hidden');
+            } else {
+                wrap.classList.add('hidden');
+            }
+        }
+
+        function toggleBatchPublicSharePasswordActions() {
+            const isClear = document.getElementById('batchPublicShareClearPassword').checked;
+            const pwInput = document.getElementById('batchPublicSharePassword');
+            const pwConfirm = document.getElementById('batchPublicSharePasswordConfirm');
+            
+            if (isClear) {
+                pwInput.value = '';
+                pwConfirm.value = '';
+                pwInput.disabled = true;
+                pwConfirm.disabled = true;
+            } else {
+                pwInput.disabled = false;
+                pwConfirm.disabled = false;
+            }
+        }
+
+        async function saveBatchPublicShareConfig() {
+            if (currentBatchPublicShareAccounts.length === 0) return;
+            
+            const enabled = document.getElementById('batchPublicShareEnabled').checked;
+            const expiresMode = document.getElementById('batchPublicShareExpiresMode').value;
+            const expiresAtStr = document.getElementById('batchPublicShareExpiresAt').value;
+            
+            let expiresAt = null;
+            if (enabled && expiresMode === 'fixed') {
+                if (!expiresAtStr) {
+                    showNotification('请设置截止时间', 'warning');
+                    return;
+                }
+                const d = new Date(expiresAtStr);
+                if (d <= new Date()) {
+                    showNotification('截止时间必须晚于当前时间', 'warning');
+                    return;
+                }
+                expiresAt = d.toISOString();
+            }
+
+            const clearPassword = document.getElementById('batchPublicShareClearPassword').checked;
+            const password = document.getElementById('batchPublicSharePassword').value;
+            const passwordConfirm = document.getElementById('batchPublicSharePasswordConfirm').value;
+
+            if (!clearPassword && password) {
+                if (password.length < 8) {
+                    showNotification('访问密码不能少于 8 位', 'warning');
+                    return;
+                }
+                if (password !== passwordConfirm) {
+                    showNotification('两次输入的密码不一致', 'warning');
+                    return;
+                }
+            }
+
+            const payload = {
+                enabled,
+                expires_mode: expiresMode,
+                expires_at: expiresAt,
+                clear_password: clearPassword
+            };
+            
+            if (!clearPassword && password) {
+                payload.access_password = password;
+            }
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (const emailId of currentBatchPublicShareAccounts) {
+                try {
+                    await apiRequest('/api/public-shares/' + encodeURIComponent(emailId), {
+                        method: 'PUT',
+                        body: JSON.stringify(payload)
+                    });
+                    successCount++;
+                } catch (error) {
+                    failCount++;
+                    console.error('Batch public share update error for ' + emailId, error);
+                }
+            }
+            
+            closeBatchPublicShareModal();
+            if (failCount === 0) {
+                showNotification(`成功更新 ${successCount} 个账户的公开页面设置`, 'success');
+            } else {
+                showNotification(`更新完成：成功 ${successCount} 个，失败 ${failCount} 个`, 'warning');
+            }
+        }
+        // ================= End Batch Operations =================
 
     </script>
 </body>

@@ -3604,6 +3604,29 @@ async def get_accounts(
     return await get_all_accounts(page, page_size, email_search, tag_search, category_search, category_key, tag_key)
 
 
+@app.get("/accounts/export")
+async def export_accounts(request: Request):
+    """导出所有邮箱账户为 CSV"""
+    require_authenticated(request, allow_api_key=True)
+    accounts = load_accounts_data()
+    import io
+    import csv
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Email", "Auth Method", "Category Key", "Tag Keys", "Refresh Token", "Client ID"])
+    for email, data in accounts.items():
+        auth_method = data.get("auth_method", DEFAULT_ACCOUNT_AUTH_METHOD)
+        category = data.get("category_key", "")
+        tags = ";".join(data.get("tag_keys", []))
+        refresh_token = data.get("refresh_token", "")
+        client_id = data.get("client_id", "")
+        writer.writerow([email, auth_method, category, tags, refresh_token, client_id])
+    
+    response = Response(content=output.getvalue(), media_type="text/csv")
+    response.headers["Content-Disposition"] = "attachment; filename=accounts_export.csv"
+    return response
+
+
 @app.get("/classifications", response_model=ClassificationCatalogResponse)
 async def get_classifications(request: Request):
     require_authenticated(request, allow_api_key=True)
