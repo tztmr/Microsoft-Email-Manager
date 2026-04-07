@@ -4688,10 +4688,19 @@
                         
                         <!-- 统计信息 -->
                         <div id="accountsStats" class="mb-4" style="display: none;">
-                            <div class="flex gap-4 text-sm">
+                            <div class="flex items-center gap-4 text-sm">
                                 <span>总数：<strong id="totalAccounts">0</strong></span>
                                 <span>当前页：<strong id="currentPage">1</strong></span>
-                                <span>每页：<strong id="pageSize">10</strong></span>
+                                <div class="flex items-center gap-2">
+                                    <span>每页：</span>
+                                    <select id="pageSizeSelect" class="form-control" style="width: auto; padding: 2px 24px 2px 8px; height: 28px; font-size: 13px;" onchange="changePageSize(this.value)">
+                                        <option value="10">10</option>
+                                        <option value="20">20</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                        <option value="500">全部 (500)</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
@@ -10199,7 +10208,8 @@ Authorization: Bearer om_your_api_key
             const accountsStats = document.getElementById('accountsStats');
             document.getElementById('totalAccounts').textContent = accountsTotalCount;
             document.getElementById('currentPage').textContent = accountsCurrentPage;
-            document.getElementById('pageSize').textContent = accountsPageSize;
+            // Removed document.getElementById('pageSize').textContent as we are using select now
+            document.getElementById('pageSizeSelect').value = accountsPageSize;
             accountsStats.style.display = accountsTotalCount > 0 ? 'block' : 'none';
         }
         
@@ -10273,6 +10283,11 @@ Authorization: Bearer om_your_api_key
             }
         }
         
+        function changePageSize(size) {
+            accountsPageSize = parseInt(size);
+            loadAccounts(1);
+        }
+
         function searchAccounts() {
             currentEmailSearch = document.getElementById('accountEmailSearch').value.trim();
             currentTagSearch = document.getElementById('tagSearch').value.trim();
