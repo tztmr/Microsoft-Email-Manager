@@ -3010,6 +3010,85 @@
             padding: 18px 24px 22px;
         }
 
+        .token-history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 120px;
+        }
+
+        .token-history-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 14px 16px;
+            background: #fff;
+        }
+
+        .token-history-item.is-failed {
+            border-color: #fecaca;
+            background: #fef2f2;
+        }
+
+        .token-history-item.is-success {
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+        }
+
+        .token-history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .token-history-title {
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .token-history-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: #64748b;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .token-history-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #e2e8f0;
+            color: #334155;
+        }
+
+        .token-history-badge.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .token-history-badge.error {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .token-history-message {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #334155;
+        }
+
+        .token-history-error {
+            color: #b91c1c;
+            font-weight: 600;
+        }
+
         .public-share-grid {
             display: grid;
             gap: 16px;
@@ -4626,6 +4705,10 @@
                                     <span></span>
                                     分类编辑
                                 </button>
+                                <button class="btn btn-secondary btn-sm" onclick="openTokenRefreshHistoryModal()" id="tokenRefreshHistoryBtn">
+                                    <span></span>
+                                    刷新记录
+                                </button>
                                 <button class="btn btn-secondary btn-sm" onclick="loadAccounts()">
                                     <span></span>
                                     刷新列表
@@ -4637,7 +4720,7 @@
                         <div class="search-container">
                             <div class="flex gap-3 mb-4">
                                 <div class="flex-1">
-                                    <input type="text" id="accountEmailSearch" class="form-control" placeholder="按邮箱地址搜索..." onkeypress="handleSearchKeyPress(event)">
+                                    <textarea id="accountEmailSearch" class="form-control" rows="3" placeholder="支持单个或批量邮箱搜索；可粘贴多行、空格或逗号分隔的邮箱列表..." onkeydown="handleAccountEmailSearchKeyDown(event)" style="resize: vertical; min-height: 88px;"></textarea>
                                 </div>
                                 <div class="flex-1">
                                     <input type="text" id="tagSearch" class="form-control" placeholder="按标签搜索..." onkeypress="handleSearchKeyPress(event)">
@@ -4691,6 +4774,9 @@
                             <div class="flex items-center gap-4 text-sm">
                                 <span>总数：<strong id="totalAccounts">0</strong></span>
                                 <span>当前页：<strong id="currentPage">1</strong></span>
+                                <span id="batchSearchRequestedWrap" style="display: none;">查询邮箱：<strong id="batchSearchRequestedCount">0</strong></span>
+                                <span id="batchSearchMatchedWrap" style="display: none;">命中：<strong id="batchSearchMatchedCount">0</strong></span>
+                                <span id="batchSearchMissingWrap" style="display: none;">未命中：<strong id="batchSearchMissingCount">0</strong></span>
                                 <div class="flex items-center gap-2">
                                     <span>每页：</span>
                                     <select id="pageSizeSelect" class="form-control" style="width: auto; padding: 2px 24px 2px 8px; height: 28px; font-size: 13px;" onchange="changePageSize(this.value)">
@@ -4701,6 +4787,12 @@
                                         <option value="1000000">全部</option>
                                     </select>
                                 </div>
+                            </div>
+                            <div id="batchSearchMissingPanel" style="display: none; margin-top: 10px; padding: 10px 12px; border: 1px solid #fed7aa; background: #fff7ed; border-radius: 8px;">
+                                <div style="font-size: 13px; color: #9a3412; margin-bottom: 6px;">
+                                    未找到的邮箱如下：
+                                </div>
+                                <div id="batchSearchMissingEmails" style="font-size: 13px; line-height: 1.6; color: #7c2d12; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto;"></div>
                             </div>
                         </div>
 
@@ -5181,7 +5273,7 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
                                             <div class="api-param">
                                                 <span class="api-param-name">email_search</span>
                                                 <span class="api-param-type">string</span>
-                                                <span class="api-param-desc">邮箱账号模糊搜索，可选</span>
+                                                <span class="api-param-desc">邮箱账号模糊搜索，支持多行 / 空格 / 逗号分隔的批量查询，可选</span>
                                             </div>
                                             <div class="api-param">
                                                 <span class="api-param-name">tag_search</span>
@@ -5892,6 +5984,41 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
         </div>
     </div>
 
+    <div id="tokenRefreshHistoryModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 960px;">
+            <div class="modal-header">
+                <h3>Refresh Token 刷新记录</h3>
+                <button class="modal-close" type="button" onclick="closeTokenRefreshHistoryModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="flex gap-3 mb-4" style="align-items: center; flex-wrap: wrap;">
+                    <div class="flex-1" style="min-width: 240px;">
+                        <input type="text" id="tokenRefreshHistoryEmailSearch" class="form-control" placeholder="按邮箱筛选刷新记录..." onkeypress="handleTokenRefreshHistorySearchKeyPress(event)">
+                    </div>
+                    <button class="btn btn-primary btn-sm" type="button" onclick="applyTokenRefreshHistoryFilter()" id="tokenRefreshHistorySearchBtn">
+                        <span></span>
+                        搜索
+                    </button>
+                    <button class="btn btn-secondary btn-sm" type="button" onclick="clearTokenRefreshHistoryFilter()" id="tokenRefreshHistoryClearBtn">
+                        <span></span>
+                        清空
+                    </button>
+                </div>
+                <div id="tokenRefreshHistoryStats" class="text-sm" style="color: #64748b; margin-bottom: 12px;">最近刷新记录加载中...</div>
+                <div id="tokenRefreshHistoryList" class="token-history-list">
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        正在加载刷新记录...
+                    </div>
+                </div>
+                <div id="tokenRefreshHistoryPagination" class="pagination hidden"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" type="button" onclick="closeTokenRefreshHistoryModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <div id="batchClassificationModal" class="modal hidden">
         <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header">
@@ -6140,6 +6267,10 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
         let accountsPageSize = 10;
         let accountsTotalPages = 0;
         let accountsTotalCount = 0;
+        let accountSearchRequestedCount = 0;
+        let accountSearchMatchedCount = 0;
+        let accountSearchMissingCount = 0;
+        let accountSearchMissingEmails = [];
         let currentEmailSearch = '';
         let currentTagSearch = '';
         let currentCategoryKeySearch = '';
@@ -6167,6 +6298,11 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
         let accountBindMenuOpen = false;
         let currentEmailTagKeys = [];
         let currentEmailMessageId = null;
+        let tokenRefreshHistoryCurrentPage = 1;
+        let tokenRefreshHistoryPageSize = 10;
+        let tokenRefreshHistoryTotalPages = 0;
+        let tokenRefreshHistoryTotalCount = 0;
+        let tokenRefreshHistoryEmailSearch = '';
         let authTurnstileToken = '';
         let authTurnstileWidgetId = null;
         let authTurnstileSiteKey = '';
@@ -6893,6 +7029,9 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
             setButtonIcon(document.getElementById('accountHealthBtn'), 'health');
             setButtonIcon(document.querySelector('#accountsPage .btn-secondary.btn-sm[onclick="showPage(\'batchAdd\')"]'), 'batch');
             setButtonIcon(document.querySelector('#accountsPage .btn-secondary.btn-sm[onclick="showPage(\'classifications\')"]'), 'classification');
+            setButtonIcon(document.getElementById('tokenRefreshHistoryBtn'), 'docs');
+            setButtonIcon(document.getElementById('tokenRefreshHistorySearchBtn'), 'search');
+            setButtonIcon(document.getElementById('tokenRefreshHistoryClearBtn'), 'clear');
             setButtonIcon(document.querySelector('#accountsPage .btn-secondary.btn-sm[onclick="loadAccounts()"]'), 'refresh');
             setButtonIcon(document.querySelector('#accountsPage .btn-primary[onclick="searchAccounts()"]'), 'search');
             setButtonIcon(document.querySelector('#accountsPage .btn-secondary[onclick="clearSearch()"]'), 'clear');
@@ -6967,11 +7106,19 @@ example3@outlook.com----refresh_token3----client_id3"></textarea>
 
         function decorateAccountList(root = document) {
             root.querySelectorAll('.account-actions').forEach(actions => {
-                const buttons = actions.querySelectorAll('.btn');
-                setButtonIcon(buttons[0], 'mail');
-                setButtonIcon(buttons[1], 'open');
-                setButtonIcon(buttons[2], 'tags');
-                setButtonIcon(buttons[3], 'clear');
+                const iconMap = {
+                    view: 'mail',
+                    refreshToken: 'refresh',
+                    share: 'open',
+                    tags: 'tags',
+                    delete: 'clear'
+                };
+                actions.querySelectorAll('.btn[data-action]').forEach(button => {
+                    const action = button.getAttribute('data-action');
+                    if (action && iconMap[action]) {
+                        setButtonIcon(button, iconMap[action]);
+                    }
+                });
             });
         }
 
@@ -7722,6 +7869,10 @@ example3@live.com----refresh_token3----client_id3`;
                 accounts = data.accounts || [];
                 accountsTotalCount = data.total_accounts || 0;
                 accountsTotalPages = data.total_pages || 0;
+                accountSearchRequestedCount = data.search_requested_count || 0;
+                accountSearchMatchedCount = data.search_matched_count || 0;
+                accountSearchMissingCount = data.search_missing_count || 0;
+                accountSearchMissingEmails = Array.isArray(data.search_missing_emails) ? data.search_missing_emails : [];
                 
                 // 更新统计信息
                 updateAccountsStats();
@@ -7752,24 +7903,29 @@ example3@live.com----refresh_token3----client_id3`;
                                     <h4>${account.email_id}</h4>
                                     <p>接入方式: <strong>${authMethodLabel}</strong> · 健康状态: <strong style="color: ${health.color};">${health.label}</strong> · ${health.score} 分</p>
                                     <p style="color: #64748b;">${escapeHtml(health.summary)} · 上次检查：${escapeHtml(health.checkedAt)}</p>
+                                    ${buildRefreshTokenStatusHtml(account)}
                                     <div class="account-tags">${categoryHtml}</div>
                                     ${tagsHtml}
                                 </div>
                             </div>
                             <div class="account-actions" onclick="event.stopPropagation()">
-                                <button class="btn btn-primary btn-sm" type="button" onclick="viewAccountEmails('${account.email_id}')">
+                                <button class="btn btn-primary btn-sm" type="button" data-action="view" onclick="viewAccountEmails('${account.email_id}')">
                                     <span></span>
                                     查看邮件
                                 </button>
-                                <button class="btn btn-secondary btn-sm" type="button" onclick="openPublicShareModal('${account.email_id}')">
+                                <button class="btn btn-secondary btn-sm" type="button" data-action="refreshToken" onclick="refreshAccountToken('${account.email_id}', this)">
+                                    <span></span>
+                                    立即刷新 Token
+                                </button>
+                                <button class="btn btn-secondary btn-sm" type="button" data-action="share" onclick="openPublicShareModal('${account.email_id}')">
                                     <span></span>
                                     公开页面
                                 </button>
-                                <button class="btn btn-secondary btn-sm" type="button" onclick="editAccountTags('${account.email_id}')">
+                                <button class="btn btn-secondary btn-sm" type="button" data-action="tags" onclick="editAccountTags('${account.email_id}')">
                                     <span></span>
                                     管理分类
                                 </button>
-                                <button class="btn btn-danger btn-sm" type="button" onclick="deleteAccount('${account.email_id}')">
+                                <button class="btn btn-danger btn-sm" type="button" data-action="delete" onclick="deleteAccount('${account.email_id}')">
                                     <span></span>
                                     删除
                                 </button>
@@ -7997,6 +8153,228 @@ example3@live.com----refresh_token3----client_id3`;
             const date = new Date(value);
             if (Number.isNaN(date.getTime())) return value;
             return date.toLocaleString('zh-CN', { hour12: false });
+        }
+
+        function getRefreshTokenStatusDisplay(account) {
+            const status = String(account?.refresh_token_last_status || '').toLowerCase();
+            if (status === 'success') {
+                return {
+                    label: account?.refresh_token_last_token_changed ? '最近刷新成功，Token 已更新' : '最近刷新成功',
+                    color: '#16a34a'
+                };
+            }
+            if (status === 'failed') {
+                return {
+                    label: '最近刷新失败',
+                    color: '#dc2626'
+                };
+            }
+            return {
+                label: '尚未执行自动刷新',
+                color: '#64748b'
+            };
+        }
+
+        function buildRefreshTokenStatusHtml(account) {
+            const refreshStatus = getRefreshTokenStatusDisplay(account);
+            const lastAttemptAt = formatDateTime(account?.refresh_token_last_attempt_at, '未执行');
+            const lastSuccessAt = formatDateTime(account?.refresh_token_last_success_at, '未成功');
+            const triggerSource = account?.refresh_token_last_triggered_by === 'manual' ? '手动' :
+                account?.refresh_token_last_triggered_by === 'scheduler' ? '定时' : '未记录';
+            const message = account?.refresh_token_last_error || account?.refresh_token_last_message || '';
+            const detail = message ? ` · ${escapeHtml(message)}` : '';
+            return `
+                <p style="color: #64748b;">
+                    Token 刷新: <strong style="color: ${refreshStatus.color};">${escapeHtml(refreshStatus.label)}</strong>
+                    · 上次尝试：${escapeHtml(lastAttemptAt)}
+                    · 上次成功：${escapeHtml(lastSuccessAt)}
+                    · 触发方式：${escapeHtml(triggerSource)}${detail}
+                </p>
+            `;
+        }
+
+        async function refreshAccountToken(emailId, button) {
+            if (!emailId) return;
+            const actionButton = button || null;
+            const originalLabel = actionButton ? actionButton.innerHTML : '';
+            if (actionButton) {
+                actionButton.disabled = true;
+                actionButton.innerHTML = buttonLabel('loading', '刷新中...', 'spinning');
+            }
+
+            try {
+                const response = await apiRequest(`/accounts/${encodeURIComponent(emailId)}/refresh-token`, {
+                    method: 'POST'
+                });
+                const resultText = response.token_changed ? 'Refresh Token 已更新' : 'Refresh Token 校验完成，令牌未变化';
+                showNotification(`${emailId} ${resultText}`, 'success');
+                await loadAccounts(accountsCurrentPage);
+                if (!document.getElementById('tokenRefreshHistoryModal').classList.contains('hidden')) {
+                    await loadTokenRefreshHistory(tokenRefreshHistoryCurrentPage);
+                }
+            } catch (error) {
+                showNotification(`手动刷新失败: ${error.message}`, 'error');
+            } finally {
+                if (actionButton) {
+                    actionButton.disabled = false;
+                    actionButton.innerHTML = originalLabel;
+                }
+            }
+        }
+
+        function handleTokenRefreshHistorySearchKeyPress(event) {
+            if (event.key === 'Enter') {
+                applyTokenRefreshHistoryFilter();
+            }
+        }
+
+        function getTokenRefreshRecordStatusBadge(record) {
+            if (record.status === 'success') {
+                return `<span class="token-history-badge success">${record.token_changed ? '成功并更新 Token' : '成功未变更'}</span>`;
+            }
+            return '<span class="token-history-badge error">刷新失败</span>';
+        }
+
+        function renderTokenRefreshHistoryRecords(records) {
+            const list = document.getElementById('tokenRefreshHistoryList');
+            if (!Array.isArray(records) || !records.length) {
+                list.innerHTML = '<div class="text-center" style="padding: 32px; color: #64748b;">暂无符合条件的刷新记录</div>';
+                return;
+            }
+
+            list.innerHTML = records.map(record => {
+                const isFailed = record.status !== 'success';
+                const statusClass = isFailed ? 'is-failed' : 'is-success';
+                const source = record.triggered_by === 'manual' ? '手动' : '定时';
+                const message = record.error || record.message || '无附加信息';
+                return `
+                    <div class="token-history-item ${statusClass}">
+                        <div class="token-history-header">
+                            <div class="token-history-title">${escapeHtml(record.email || '')}</div>
+                            ${getTokenRefreshRecordStatusBadge(record)}
+                        </div>
+                        <div class="token-history-meta">
+                            <span>时间：${escapeHtml(formatDateTime(record.run_at))}</span>
+                            <span>方式：${escapeHtml(source)}</span>
+                            <span>接入：${escapeHtml((record.auth_method || 'imap').toUpperCase())}</span>
+                        </div>
+                        <div class="token-history-message ${isFailed ? 'token-history-error' : ''}">
+                            ${escapeHtml(message)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateTokenRefreshHistoryStats() {
+            const stats = document.getElementById('tokenRefreshHistoryStats');
+            const filterText = tokenRefreshHistoryEmailSearch ? `，筛选邮箱：${tokenRefreshHistoryEmailSearch}` : '';
+            stats.textContent = `共 ${tokenRefreshHistoryTotalCount} 条记录，第 ${tokenRefreshHistoryCurrentPage} / ${Math.max(tokenRefreshHistoryTotalPages, 1)} 页${filterText}`;
+        }
+
+        function updateTokenRefreshHistoryPagination() {
+            const pagination = document.getElementById('tokenRefreshHistoryPagination');
+            if (tokenRefreshHistoryTotalPages <= 1) {
+                pagination.classList.add('hidden');
+                pagination.innerHTML = '';
+                return;
+            }
+
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, tokenRefreshHistoryCurrentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(tokenRefreshHistoryTotalPages, startPage + maxVisiblePages - 1);
+            if (endPage - startPage < maxVisiblePages - 1) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+
+            let html = `<button class="btn btn-secondary btn-sm" onclick="changeTokenRefreshHistoryPage('prev')" ${tokenRefreshHistoryCurrentPage === 1 ? 'disabled' : ''}>${icon('arrow-left')} 上一页</button>`;
+            if (startPage > 1) {
+                html += `<span class="page-number" onclick="changeTokenRefreshHistoryPage(1)">1</span>`;
+                if (startPage > 2) html += '<span class="page-number disabled">...</span>';
+            }
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<span class="page-number ${i === tokenRefreshHistoryCurrentPage ? 'active' : ''}" onclick="changeTokenRefreshHistoryPage(${i})">${i}</span>`;
+            }
+            if (endPage < tokenRefreshHistoryTotalPages) {
+                if (endPage < tokenRefreshHistoryTotalPages - 1) html += '<span class="page-number disabled">...</span>';
+                html += `<span class="page-number" onclick="changeTokenRefreshHistoryPage(${tokenRefreshHistoryTotalPages})">${tokenRefreshHistoryTotalPages}</span>`;
+            }
+            html += `<button class="btn btn-secondary btn-sm" onclick="changeTokenRefreshHistoryPage('next')" ${tokenRefreshHistoryCurrentPage === tokenRefreshHistoryTotalPages ? 'disabled' : ''}>下一页 ${icon('arrow-right')}</button>`;
+
+            pagination.innerHTML = html;
+            pagination.classList.remove('hidden');
+        }
+
+        async function loadTokenRefreshHistory(page = 1, emailSearch = null) {
+            if (emailSearch !== null) {
+                tokenRefreshHistoryEmailSearch = String(emailSearch || '').trim();
+            } else {
+                tokenRefreshHistoryEmailSearch = document.getElementById('tokenRefreshHistoryEmailSearch').value.trim();
+            }
+
+            tokenRefreshHistoryCurrentPage = page;
+            const list = document.getElementById('tokenRefreshHistoryList');
+            list.innerHTML = '<div class="loading"><div class="loading-spinner"></div>正在加载刷新记录...</div>';
+
+            try {
+                const params = new URLSearchParams({
+                    page: String(tokenRefreshHistoryCurrentPage),
+                    page_size: String(tokenRefreshHistoryPageSize)
+                });
+                if (tokenRefreshHistoryEmailSearch) {
+                    params.append('email_search', tokenRefreshHistoryEmailSearch);
+                }
+
+                const response = await apiRequest(`/accounts/token-refresh-history?${params.toString()}`);
+                const records = Array.isArray(response.records) ? response.records : [];
+                tokenRefreshHistoryTotalCount = Number(response.total || 0);
+                tokenRefreshHistoryTotalPages = Number(response.total_pages || 0);
+                tokenRefreshHistoryCurrentPage = Number(response.page || tokenRefreshHistoryCurrentPage);
+                renderTokenRefreshHistoryRecords(records);
+                updateTokenRefreshHistoryStats();
+                updateTokenRefreshHistoryPagination();
+            } catch (error) {
+                list.innerHTML = `<div class="error">加载刷新记录失败: ${escapeHtml(error.message)}</div>`;
+                document.getElementById('tokenRefreshHistoryPagination').classList.add('hidden');
+                document.getElementById('tokenRefreshHistoryStats').textContent = '刷新记录加载失败';
+            }
+        }
+
+        async function openTokenRefreshHistoryModal(emailSearch = '') {
+            tokenRefreshHistoryCurrentPage = 1;
+            tokenRefreshHistoryEmailSearch = String(emailSearch || '').trim();
+            document.getElementById('tokenRefreshHistoryEmailSearch').value = tokenRefreshHistoryEmailSearch;
+            document.getElementById('tokenRefreshHistoryModal').classList.remove('hidden');
+            await loadTokenRefreshHistory(1, tokenRefreshHistoryEmailSearch);
+        }
+
+        function closeTokenRefreshHistoryModal() {
+            document.getElementById('tokenRefreshHistoryModal').classList.add('hidden');
+        }
+
+        function applyTokenRefreshHistoryFilter() {
+            loadTokenRefreshHistory(1);
+        }
+
+        function clearTokenRefreshHistoryFilter() {
+            document.getElementById('tokenRefreshHistoryEmailSearch').value = '';
+            tokenRefreshHistoryEmailSearch = '';
+            loadTokenRefreshHistory(1, '');
+        }
+
+        function changeTokenRefreshHistoryPage(direction) {
+            let nextPage = tokenRefreshHistoryCurrentPage;
+            if (direction === 'prev') {
+                nextPage = Math.max(1, tokenRefreshHistoryCurrentPage - 1);
+            } else if (direction === 'next') {
+                nextPage = Math.min(tokenRefreshHistoryTotalPages, tokenRefreshHistoryCurrentPage + 1);
+            } else {
+                nextPage = parseInt(direction, 10) || 1;
+            }
+
+            if (nextPage !== tokenRefreshHistoryCurrentPage && nextPage >= 1 && nextPage <= tokenRefreshHistoryTotalPages) {
+                loadTokenRefreshHistory(nextPage);
+            }
         }
 
         function toggleApiKeyExpiryMode() {
@@ -8279,7 +8657,7 @@ example3@live.com----refresh_token3----client_id3`;
                     queryFields: [
                         { key: 'page', label: '页码', kind: 'number', typeLabel: 'integer', required: false, defaultValue: 1, min: 1, hint: '从 1 开始。' },
                         { key: 'page_size', label: '每页数量', kind: 'number', typeLabel: 'integer', required: false, defaultValue: 10, min: 1, max: 100, hint: '范围 1-100。' },
-                        { key: 'email_search', label: '邮箱搜索', kind: 'text', typeLabel: 'string', placeholder: 'example@outlook.com', hint: '按邮箱地址模糊搜索。' },
+                        { key: 'email_search', label: '邮箱搜索', kind: 'text', typeLabel: 'string', placeholder: 'example@outlook.com 或批量邮箱列表', hint: '支持单个邮箱模糊搜索，也支持多行 / 空格 / 逗号分隔的批量查询。' },
                         { key: 'tag_search', label: '标签搜索', kind: 'text', typeLabel: 'string', placeholder: '已注册CHATGPT', hint: '按标签中文、英文或 key 模糊搜索。' },
                         { key: 'category_search', label: '分类搜索', kind: 'text', typeLabel: 'string', placeholder: 'mregister', hint: '按分类 key / 中文 / 英文模糊搜索。' },
                         { key: 'category_key', label: '分类 Key', kind: 'select', typeLabel: 'string', placeholder: '全部分类', options: () => [{ value: '', label: '全部分类' }, ...getApiDocsCategoryChoices(false)] },
@@ -8984,7 +9362,7 @@ Authorization: Bearer om_your_api_key
 \`\`\`
 
 **查询参数**
-- \`email_search\`: 邮箱模糊搜索
+- \`email_search\`: 邮箱模糊搜索，支持多行 / 空格 / 逗号分隔的批量查询
 - \`tag_search\`: 标签模糊搜索
 - \`category_search\`: 分类模糊搜索，匹配 key / 中文 / 英文
 - \`category_key\`: 分类 key 精确过滤
@@ -10224,11 +10602,30 @@ Authorization: Bearer om_your_api_key
 
         function updateAccountsStats() {
             const accountsStats = document.getElementById('accountsStats');
+            const requestedWrap = document.getElementById('batchSearchRequestedWrap');
+            const matchedWrap = document.getElementById('batchSearchMatchedWrap');
+            const missingWrap = document.getElementById('batchSearchMissingWrap');
+            const missingPanel = document.getElementById('batchSearchMissingPanel');
+            const missingEmails = document.getElementById('batchSearchMissingEmails');
             document.getElementById('totalAccounts').textContent = accountsTotalCount;
             document.getElementById('currentPage').textContent = accountsCurrentPage;
-            // Removed document.getElementById('pageSize').textContent as we are using select now
+            document.getElementById('batchSearchRequestedCount').textContent = accountSearchRequestedCount;
+            document.getElementById('batchSearchMatchedCount').textContent = accountSearchMatchedCount;
+            document.getElementById('batchSearchMissingCount').textContent = accountSearchMissingCount;
             document.getElementById('pageSizeSelect').value = accountsPageSize;
-            accountsStats.style.display = accountsTotalCount > 0 ? 'block' : 'none';
+            requestedWrap.style.display = accountSearchRequestedCount > 0 ? 'inline' : 'none';
+            matchedWrap.style.display = accountSearchRequestedCount > 0 ? 'inline' : 'none';
+            missingWrap.style.display = accountSearchRequestedCount > 0 ? 'inline' : 'none';
+
+            if (accountSearchMissingCount > 0 && accountSearchMissingEmails.length > 0) {
+                missingEmails.textContent = accountSearchMissingEmails.join('\n');
+                missingPanel.style.display = 'block';
+            } else {
+                missingEmails.textContent = '';
+                missingPanel.style.display = 'none';
+            }
+
+            accountsStats.style.display = (accountsTotalCount > 0 || accountSearchRequestedCount > 0) ? 'block' : 'none';
         }
         
         function updateAccountsPagination() {
@@ -10323,6 +10720,13 @@ Authorization: Bearer om_your_api_key
             loadAccounts(1);
         }
         
+        function handleAccountEmailSearchKeyDown(event) {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                searchAccounts();
+            }
+        }
+
         function handleSearchKeyPress(event) {
             if (event.key === 'Enter') {
                 searchAccounts();
@@ -11001,8 +11405,3 @@ Authorization: Bearer om_your_api_key
     </script>
 </body>
 </html>
-
-
-
-
-

@@ -23,7 +23,7 @@ import secrets
 import socket
 import threading
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from itertools import groupby
 from pathlib import Path
@@ -60,6 +60,7 @@ ACCOUNT_HEALTH_FILE = Path(os.getenv("ACCOUNT_HEALTH_FILE", str(DATA_DIR / "acco
 ACCOUNT_CLASSIFICATIONS_FILE = Path(os.getenv("ACCOUNT_CLASSIFICATIONS_FILE", str(DATA_DIR / "account_classifications.json")))
 EMAIL_TAGS_FILE = Path(os.getenv("EMAIL_TAGS_FILE", str(DATA_DIR / "email_tags.json")))
 SITE_SETTINGS_FILE = Path(os.getenv("SITE_SETTINGS_FILE", str(DATA_DIR / "site_settings.json")))
+TOKEN_REFRESH_HISTORY_FILE = Path(os.getenv("TOKEN_REFRESH_HISTORY_FILE", str(DATA_DIR / "token_refresh_history.json")))
 STATIC_DIR = BASE_DIR / "static"
 ICON_CACHE_DIR = DATA_DIR / "icon_cache"
 ICON_ASSET_DIR = STATIC_DIR / "assets" / "icons"
@@ -75,6 +76,26 @@ ADMIN_LOGIN_FAILURE_LIMIT = max(1, int(os.getenv("ADMIN_LOGIN_FAILURE_LIMIT", "5
 ADMIN_LOGIN_FAILURE_WINDOW_MINUTES = max(1, int(os.getenv("ADMIN_LOGIN_FAILURE_WINDOW_MINUTES", "15")))
 ADMIN_LOGIN_LOCKOUT_MINUTES = max(1, int(os.getenv("ADMIN_LOGIN_LOCKOUT_MINUTES", "15")))
 TRUST_PROXY_HEADERS = str(os.getenv("TRUST_PROXY_HEADERS", "")).strip().lower() in {"1", "true", "yes", "on"}
+REFRESH_TOKEN_AUTO_UPDATE_ENABLED = str(
+    os.getenv("REFRESH_TOKEN_AUTO_UPDATE_ENABLED", "true")
+).strip().lower() in {"1", "true", "yes", "on"}
+REFRESH_TOKEN_AUTO_UPDATE_INTERVAL_DAYS = max(
+    1,
+    int(os.getenv("REFRESH_TOKEN_AUTO_UPDATE_INTERVAL_DAYS", "30")),
+)
+REFRESH_TOKEN_AUTO_UPDATE_CHECK_INTERVAL_HOURS = max(
+    1,
+    int(os.getenv("REFRESH_TOKEN_AUTO_UPDATE_CHECK_INTERVAL_HOURS", "6")),
+)
+REFRESH_TOKEN_AUTO_UPDATE_RETRY_HOURS = max(
+    1,
+    int(os.getenv("REFRESH_TOKEN_AUTO_UPDATE_RETRY_HOURS", "24")),
+)
+REFRESH_TOKEN_UPDATE_LOG_LIMIT = max(
+    50,
+    int(os.getenv("REFRESH_TOKEN_UPDATE_LOG_LIMIT", "500")),
+)
+APP_WORKERS = max(1, int(os.getenv("WORKERS", "1")))
 TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 DEFAULT_ADMIN_LOGIN_PATH = "/admin"
 DEFAULT_HOME_TITLE = "Microsoft-Email-Manager"
@@ -286,6 +307,14 @@ class AccountInfo(BaseModel):
     health_score: int = 0
     health_summary: str = "未检查"
     health_checked_at: Optional[str] = None
+    refresh_token_last_status: Optional[str] = None
+    refresh_token_last_attempt_at: Optional[str] = None
+    refresh_token_last_success_at: Optional[str] = None
+    refresh_token_last_triggered_by: Optional[str] = None
+    refresh_token_last_message: Optional[str] = None
+    refresh_token_last_error: Optional[str] = None
+    refresh_token_last_token_changed: bool = False
+    refresh_token_last_token_changed_at: Optional[str] = None
 
 
 class AccountListResponse(BaseModel):
@@ -295,6 +324,45 @@ class AccountListResponse(BaseModel):
     page_size: int
     total_pages: int
     accounts: List[AccountInfo]
+    search_requested_count: int = 0
+    search_matched_count: int = 0
+    search_missing_count: int = 0
+    search_missing_emails: List[str] = Field(default_factory=list)
+
+
+class RefreshTokenLogEntry(BaseModel):
+    """Refresh Token 更新日志条目"""
+    run_at: str
+    email: str
+    auth_method: str = DEFAULT_ACCOUNT_AUTH_METHOD
+    status: str
+    triggered_by: str
+    token_changed: bool = False
+    message: str = ""
+    error: str = ""
+    previous_token_fingerprint: str = ""
+    current_token_fingerprint: str = ""
+
+
+class RefreshTokenHistoryResponse(BaseModel):
+    """Refresh Token 历史记录响应"""
+    email_search: Optional[str] = None
+    page: int
+    page_size: int
+    total_pages: int
+    total: int
+    records: List[RefreshTokenLogEntry] = Field(default_factory=list)
+
+
+class RefreshTokenActionResponse(BaseModel):
+    """Refresh Token 手动刷新响应"""
+    email_id: str
+    message: str
+    status: str
+    token_changed: bool = False
+    last_attempt_at: Optional[str] = None
+    last_success_at: Optional[str] = None
+    last_error: Optional[str] = None
 
 
 class UpdateAccountClassificationRequest(BaseModel):
@@ -1140,23 +1208,54 @@ async def get_all_accounts(
 ) -> AccountListResponse:
     """获取所有已加载的邮箱账户列表，支持分页和搜索"""
     try:
+        email_search_terms: list[str] = []
+        if email_search:
+            seen_email_terms: set[str] = set()
+            for raw_term in re.split(r"[\s,;，；]+", email_search):
+                normalized_term = raw_term.strip().lower()
+                if normalized_term and normalized_term not in seen_email_terms:
+                    seen_email_terms.add(normalized_term)
+                    email_search_terms.append(normalized_term)
+
+        def build_account_search_summary(accounts_to_check: list[AccountInfo]) -> tuple[int, int, list[str]]:
+            if not email_search_terms:
+                return 0, 0, []
+
+            matched_terms: list[str] = []
+            missing_terms: list[str] = []
+            for search_term in email_search_terms:
+                if any(search_term in acc.email_id.lower() for acc in accounts_to_check):
+                    matched_terms.append(search_term)
+                else:
+                    missing_terms.append(search_term)
+            return len(email_search_terms), len(matched_terms), missing_terms
+
         accounts_data = load_accounts_data()
         if not accounts_data:
+            requested_count, matched_count, missing_terms = build_account_search_summary([])
             return AccountListResponse(
                 total_accounts=0, 
                 page=page, 
                 page_size=page_size, 
                 total_pages=0, 
-                accounts=[]
+                accounts=[],
+                search_requested_count=requested_count,
+                search_matched_count=matched_count,
+                search_missing_count=len(missing_terms),
+                search_missing_emails=missing_terms,
             )
         health_data = load_account_health_data().get("accounts", {})
         catalog = load_account_classifications_data()
+        token_refresh_states = load_token_refresh_history_data().get("accounts", {})
 
         all_accounts = []
         for email_id, account_info in accounts_data.items():
             health_record = health_data.get(email_id, {})
             if not isinstance(health_record, dict):
                 health_record = build_account_health_record("unchecked", 0, "未检查")
+            token_refresh_record = token_refresh_states.get(email_id, {})
+            if not isinstance(token_refresh_record, dict):
+                token_refresh_record = {}
 
             normalized_category_key = normalize_account_category_key(account_info.get("category_key"))
             normalized_tag_keys = normalize_account_tag_keys(account_info.get("tag_keys"), account_info.get("tags", []))
@@ -1176,18 +1275,25 @@ async def get_all_accounts(
                 health_score=max(0, min(int(health_record.get("score", 0) or 0), 100)),
                 health_summary=str(health_record.get("summary") or "未检查"),
                 health_checked_at=health_record.get("checked_at"),
+                refresh_token_last_status=str(token_refresh_record.get("last_status") or "") or None,
+                refresh_token_last_attempt_at=token_refresh_record.get("last_attempt_at"),
+                refresh_token_last_success_at=token_refresh_record.get("last_success_at"),
+                refresh_token_last_triggered_by=str(token_refresh_record.get("last_triggered_by") or "") or None,
+                refresh_token_last_message=str(token_refresh_record.get("last_message") or "") or None,
+                refresh_token_last_error=str(token_refresh_record.get("last_error") or "") or None,
+                refresh_token_last_token_changed=bool(token_refresh_record.get("last_token_changed", False)),
+                refresh_token_last_token_changed_at=token_refresh_record.get("last_token_changed_at"),
             )
             all_accounts.append(account)
 
         # 应用搜索过滤
         filtered_accounts = all_accounts
         
-        # 邮箱账号模糊搜索
-        if email_search:
-            email_search_lower = email_search.lower()
+        # 邮箱账号模糊搜索，支持空格/换行分隔的批量邮箱查询
+        if email_search_terms:
             filtered_accounts = [
                 acc for acc in filtered_accounts 
-                if email_search_lower in acc.email_id.lower()
+                if any(search_term in acc.email_id.lower() for search_term in email_search_terms)
             ]
 
         if category_key:
@@ -1236,13 +1342,18 @@ async def get_all_accounts(
         start_index = (page - 1) * page_size
         end_index = start_index + page_size
         paginated_accounts = filtered_accounts[start_index:end_index]
+        requested_count, matched_count, missing_terms = build_account_search_summary(filtered_accounts)
 
         return AccountListResponse(
             total_accounts=total_accounts,
             page=page,
             page_size=page_size,
             total_pages=total_pages,
-            accounts=paginated_accounts
+            accounts=paginated_accounts,
+            search_requested_count=requested_count,
+            search_matched_count=matched_count,
+            search_missing_count=len(missing_terms),
+            search_missing_emails=missing_terms,
         )
 
     except json.JSONDecodeError:
@@ -1346,6 +1457,53 @@ def load_accounts_data() -> dict[str, Any]:
 def save_accounts_data(data: dict[str, Any]) -> None:
     with auth_lock:
         _write_json_file(ACCOUNTS_FILE, data if isinstance(data, dict) else {})
+
+
+def load_token_refresh_history_data() -> dict[str, Any]:
+    with auth_lock:
+        data = _read_json_file(TOKEN_REFRESH_HISTORY_FILE, {"accounts": {}, "logs": []})
+        accounts = data.get("accounts")
+        logs = data.get("logs")
+        return {
+            "accounts": accounts if isinstance(accounts, dict) else {},
+            "logs": logs if isinstance(logs, list) else [],
+        }
+
+
+def save_token_refresh_history_data(data: dict[str, Any]) -> None:
+    with auth_lock:
+        _write_json_file(
+            TOKEN_REFRESH_HISTORY_FILE,
+            {
+                "accounts": data.get("accounts", {}),
+                "logs": data.get("logs", [])[-REFRESH_TOKEN_UPDATE_LOG_LIMIT:],
+            },
+        )
+
+
+def get_token_refresh_state(email_id: str) -> dict[str, Any]:
+    history = load_token_refresh_history_data()
+    account_state = history.get("accounts", {}).get(email_id)
+    return account_state if isinstance(account_state, dict) else {}
+
+
+def get_filtered_token_refresh_logs(email_search: str | None = None) -> list[dict[str, Any]]:
+    history = load_token_refresh_history_data()
+    logs = history.get("logs", [])
+    if not isinstance(logs, list):
+        return []
+
+    normalized_email = str(email_search or "").strip().lower()
+    filtered_logs = [
+        entry
+        for entry in reversed(logs)
+        if isinstance(entry, dict)
+        and (
+            not normalized_email
+            or normalized_email in str(entry.get("email") or "").strip().lower()
+        )
+    ]
+    return filtered_logs
 
 
 def load_account_health_data() -> dict[str, Any]:
@@ -2383,6 +2541,211 @@ async def get_access_token(credentials: AccountCredentials) -> str:
         raise HTTPException(status_code=500, detail="Token acquisition failed")
 
 
+def parse_iso_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def build_refresh_token_fingerprint(token: str | None) -> str:
+    if not token:
+        return ""
+    return hashlib.sha256(str(token).encode("utf-8")).hexdigest()[:12]
+
+
+def record_refresh_token_update(
+    *,
+    email_id: str,
+    auth_method: str,
+    status: str,
+    triggered_by: str,
+    token_changed: bool,
+    previous_token: str | None = None,
+    current_token: str | None = None,
+    message: str = "",
+    error: str = "",
+) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    history = load_token_refresh_history_data()
+    accounts = history.get("accounts", {})
+    logs = history.get("logs", [])
+
+    previous_fingerprint = build_refresh_token_fingerprint(previous_token)
+    current_fingerprint = build_refresh_token_fingerprint(current_token)
+
+    account_record = accounts.get(email_id)
+    if not isinstance(account_record, dict):
+        account_record = {}
+
+    account_record.update(
+        {
+            "email": email_id,
+            "auth_method": normalize_account_auth_method(auth_method),
+            "last_attempt_at": now,
+            "last_status": status,
+            "last_triggered_by": triggered_by,
+            "last_message": message or "",
+            "last_error": error or "",
+            "last_token_changed": bool(token_changed),
+            "last_previous_token_fingerprint": previous_fingerprint,
+            "last_current_token_fingerprint": current_fingerprint,
+        }
+    )
+    if status == "success":
+        account_record["last_success_at"] = now
+    if token_changed:
+        account_record["last_token_changed_at"] = now
+
+    accounts[email_id] = account_record
+    logs.append(
+        {
+            "run_at": now,
+            "email": email_id,
+            "auth_method": normalize_account_auth_method(auth_method),
+            "status": status,
+            "triggered_by": triggered_by,
+            "token_changed": bool(token_changed),
+            "message": message or "",
+            "error": error or "",
+            "previous_token_fingerprint": previous_fingerprint,
+            "current_token_fingerprint": current_fingerprint,
+        }
+    )
+    history["accounts"] = accounts
+    history["logs"] = logs
+    save_token_refresh_history_data(history)
+
+
+def should_run_scheduled_token_refresh(account_state: dict[str, Any] | None, now: datetime) -> bool:
+    state = account_state if isinstance(account_state, dict) else {}
+    last_success_at = parse_iso_datetime(state.get("last_success_at"))
+    last_attempt_at = parse_iso_datetime(state.get("last_attempt_at"))
+    last_status = str(state.get("last_status") or "").strip().lower()
+
+    refresh_interval = timedelta(days=REFRESH_TOKEN_AUTO_UPDATE_INTERVAL_DAYS)
+    retry_interval = timedelta(hours=REFRESH_TOKEN_AUTO_UPDATE_RETRY_HOURS)
+
+    if last_success_at and now - last_success_at < refresh_interval:
+        return False
+    if last_status == "failed" and last_attempt_at and now - last_attempt_at < retry_interval:
+        return False
+    return True
+
+
+async def refresh_account_refresh_token(email_id: str, triggered_by: str = "scheduler") -> dict[str, Any]:
+    accounts_data = load_accounts_data()
+    account_data = accounts_data.get(email_id, {})
+    auth_method = normalize_account_auth_method(account_data.get("auth_method"))
+
+    try:
+        credentials = await get_account_credentials(email_id)
+        previous_token = credentials.refresh_token
+        await get_access_token(credentials)
+        current_token = credentials.refresh_token
+        token_changed = current_token != previous_token
+        message = "已完成定时刷新检查"
+        if token_changed:
+            message = "Refresh Token 已更新"
+        record_refresh_token_update(
+            email_id=email_id,
+            auth_method=auth_method,
+            status="success",
+            triggered_by=triggered_by,
+            token_changed=token_changed,
+            previous_token=previous_token,
+            current_token=current_token,
+            message=message,
+        )
+        return {"email": email_id, "status": "success", "token_changed": token_changed}
+    except HTTPException as exc:
+        detail = str(exc.detail or "Token refresh failed")
+        record_refresh_token_update(
+            email_id=email_id,
+            auth_method=auth_method,
+            status="failed",
+            triggered_by=triggered_by,
+            token_changed=False,
+            message="Refresh Token 定时刷新失败",
+            error=detail,
+        )
+        logger.warning("Scheduled refresh token update failed for %s: %s", email_id, detail)
+        return {"email": email_id, "status": "failed", "error": detail, "status_code": exc.status_code}
+    except Exception as exc:
+        detail = str(exc)
+        record_refresh_token_update(
+            email_id=email_id,
+            auth_method=auth_method,
+            status="failed",
+            triggered_by=triggered_by,
+            token_changed=False,
+            message="Refresh Token 定时刷新失败",
+            error=detail,
+        )
+        logger.error("Unexpected scheduled refresh token error for %s: %s", email_id, detail)
+        return {"email": email_id, "status": "failed", "error": detail}
+
+
+async def run_scheduled_refresh_token_updates() -> dict[str, int]:
+    accounts_data = load_accounts_data()
+    if not accounts_data:
+        return {"due": 0, "success": 0, "failed": 0, "changed": 0}
+
+    now = datetime.now(timezone.utc)
+    history = load_token_refresh_history_data()
+    account_states = history.get("accounts", {})
+    due_email_ids = [
+        email_id
+        for email_id, account_data in accounts_data.items()
+        if isinstance(account_data, dict)
+        and should_run_scheduled_token_refresh(account_states.get(email_id), now)
+    ]
+
+    if not due_email_ids:
+        return {"due": 0, "success": 0, "failed": 0, "changed": 0}
+
+    logger.info(
+        "Refresh token scheduler found %s account(s) due for update",
+        len(due_email_ids),
+    )
+    summary = {"due": len(due_email_ids), "success": 0, "failed": 0, "changed": 0}
+    for email_id in due_email_ids:
+        result = await refresh_account_refresh_token(email_id, triggered_by="scheduler")
+        if result.get("status") == "success":
+            summary["success"] += 1
+            if result.get("token_changed"):
+                summary["changed"] += 1
+        else:
+            summary["failed"] += 1
+
+    logger.info(
+        "Refresh token scheduler completed: due=%s success=%s failed=%s changed=%s",
+        summary["due"],
+        summary["success"],
+        summary["failed"],
+        summary["changed"],
+    )
+    return summary
+
+
+async def refresh_token_scheduler_loop() -> None:
+    check_interval_seconds = REFRESH_TOKEN_AUTO_UPDATE_CHECK_INTERVAL_HOURS * 3600
+    logger.info(
+        "Refresh token scheduler started: interval=%s day(s), check every %s hour(s), retry after %s hour(s)",
+        REFRESH_TOKEN_AUTO_UPDATE_INTERVAL_DAYS,
+        REFRESH_TOKEN_AUTO_UPDATE_CHECK_INTERVAL_HOURS,
+        REFRESH_TOKEN_AUTO_UPDATE_RETRY_HOURS,
+    )
+    while True:
+        await run_scheduled_refresh_token_updates()
+        await asyncio.sleep(check_interval_seconds)
+
+
 def build_graph_headers(access_token: str) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {access_token}",
@@ -3063,6 +3426,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 
     处理应用启动和关闭时的资源管理
     """
+    scheduler_task: asyncio.Task[None] | None = None
+
     # 应用启动
     logger.info("Starting Microsoft-Email-Manager...")
     logger.info(f"IMAP connection pool initialized with max_connections={MAX_CONNECTIONS}")
@@ -3120,15 +3485,33 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         raise RuntimeError(f"Site settings path is a directory, expected a file: {SITE_SETTINGS_FILE}")
     if not SITE_SETTINGS_FILE.exists():
         _write_json_file(SITE_SETTINGS_FILE, get_default_site_settings())
+    if TOKEN_REFRESH_HISTORY_FILE.exists() and TOKEN_REFRESH_HISTORY_FILE.is_dir():
+        raise RuntimeError(f"Token refresh history path is a directory, expected a file: {TOKEN_REFRESH_HISTORY_FILE}")
+    if not TOKEN_REFRESH_HISTORY_FILE.exists():
+        _write_json_file(TOKEN_REFRESH_HISTORY_FILE, {"accounts": {}, "logs": []})
     ICON_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cleanup_expired_sessions()
     cleanup_expired_open_access()
     cleanup_expired_admin_login_attempts()
+    if REFRESH_TOKEN_AUTO_UPDATE_ENABLED and APP_WORKERS == 1:
+        scheduler_task = asyncio.create_task(refresh_token_scheduler_loop())
+        logger.info("Refresh token scheduler enabled")
+    elif REFRESH_TOKEN_AUTO_UPDATE_ENABLED:
+        logger.warning(
+            "Refresh token scheduler disabled because WORKERS=%s may cause duplicate scheduled runs",
+            APP_WORKERS,
+        )
+    else:
+        logger.info("Refresh token scheduler disabled")
 
     yield
 
     # 应用关闭
     logger.info("Shutting down Microsoft-Email-Manager...")
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await scheduler_task
     logger.info("Closing IMAP connection pool...")
     imap_pool.close_all_connections()
     logger.info("Application shutdown complete.")
@@ -3599,7 +3982,7 @@ async def get_accounts(
     request: Request,
     page: int = Query(1, ge=1, description="页码，从1开始"),
     page_size: int = Query(10, ge=1, description="每页数量，大于等于1"),
-    email_search: Optional[str] = Query(None, description="邮箱账号模糊搜索"),
+    email_search: Optional[str] = Query(None, description="邮箱账号模糊搜索，支持多行/空格/逗号分隔的批量查询"),
     tag_search: Optional[str] = Query(None, description="标签模糊搜索"),
     category_search: Optional[str] = Query(None, description="分类模糊搜索，可匹配中英文名称和 key"),
     category_key: Optional[str] = Query(None, description="按分类 key 精确过滤"),
@@ -3717,6 +4100,54 @@ async def register_account(credentials: AccountCredentials, request: Request):
 async def run_accounts_health_check(request: Request):
     require_authenticated(request, allow_api_key=True)
     return await refresh_all_account_health()
+
+
+@app.get("/accounts/token-refresh-history", response_model=RefreshTokenHistoryResponse)
+async def get_accounts_token_refresh_history(
+    request: Request,
+    email_search: Optional[str] = Query(None, description="按邮箱模糊过滤刷新记录"),
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量"),
+):
+    require_authenticated(request, allow_api_key=True)
+    filtered_logs = get_filtered_token_refresh_logs(email_search)
+    total = len(filtered_logs)
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    start_index = (page - 1) * page_size
+    end_index = start_index + page_size
+    page_records = filtered_logs[start_index:end_index]
+    records = [RefreshTokenLogEntry(**entry) for entry in page_records]
+    return RefreshTokenHistoryResponse(
+        email_search=email_search,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        total=total,
+        records=records,
+    )
+
+
+@app.post("/accounts/{email_id}/refresh-token", response_model=RefreshTokenActionResponse)
+async def refresh_account_token_now(email_id: str, request: Request):
+    require_authenticated(request, allow_api_key=True)
+    result = await refresh_account_refresh_token(email_id, triggered_by="manual")
+    state = get_token_refresh_state(email_id)
+
+    if result.get("status") != "success":
+        raise HTTPException(
+            status_code=int(result.get("status_code") or 400),
+            detail=result.get("error") or "Refresh token update failed",
+        )
+
+    return RefreshTokenActionResponse(
+        email_id=email_id,
+        message="Refresh Token 刷新完成",
+        status="success",
+        token_changed=bool(result.get("token_changed")),
+        last_attempt_at=state.get("last_attempt_at"),
+        last_success_at=state.get("last_success_at"),
+        last_error=state.get("last_error"),
+    )
 
 
 @app.get("/emails/{email_id}", response_model=EmailListResponse)

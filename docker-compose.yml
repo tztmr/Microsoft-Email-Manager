@@ -1,18 +1,25 @@
 services:
   outlook-email-client:
-    build: .
-    container_name: outlook-email-api
+    build:
+      context: .
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.11-alpine3.21}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+    container_name: ${CONTAINER_NAME:-outlook-email-api}
+    env_file:
+      - .env
     ports:
-      - "8073:8000"
+      - "${APP_PORT:-8073}:${PORT:-8000}"
     volumes:
-      - ./data:/app/data
+      - ./data:${DATA_DIR:-/app/data}
     environment:
-      - PYTHONUNBUFFERED=1
-      - HOST=0.0.0.0
-      - PORT=8000
-      - DATA_DIR=/app/data
-      - ACCOUNTS_FILE=/app/data/accounts.json
-      - TRUST_PROXY_HEADERS=true
+      - PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-1}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8000}
+      - DATA_DIR=${DATA_DIR:-/app/data}
+      - ACCOUNTS_FILE=${ACCOUNTS_FILE:-/app/data/accounts.json}
+      - TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-true}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/auth/state')"]
@@ -26,7 +33,3 @@ services:
 networks:
   outlook-network:
     driver: bridge
-
-volumes:
-  outlook-data:
-    driver: local

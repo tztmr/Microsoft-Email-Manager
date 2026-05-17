@@ -1,5 +1,9 @@
-# 使用Python 3.11 Alpine作为基础镜像，体积更小
-FROM python:3.11-alpine3.21
+# 使用可覆盖的基础镜像，便于本地 Docker 环境按需切换镜像源
+ARG BASE_IMAGE=python:3.11-alpine3.21
+FROM ${BASE_IMAGE}
+
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_TRUSTED_HOST=
 
 # 设置工作目录
 WORKDIR /app
@@ -19,7 +23,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # 复制requirements文件并安装Python依赖
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN if [ -n "$PIP_TRUSTED_HOST" ]; then \
+        python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" --trusted-host "$PIP_TRUSTED_HOST" -r requirements.txt; \
+    else \
+        python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r requirements.txt; \
+    fi
 RUN python -c "import fastapi, httpx, aioimaplib, pydantic, requests"
 
 # 复制应用代码
@@ -38,7 +46,7 @@ EXPOSE 8000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/api')" || exit 1
+    CMD python -c "import requests; requests.get('http://localhost:8000/api/auth/state', timeout=10)" || exit 1
 
 # 启动命令
 CMD ["./docker-entrypoint.sh"] 
